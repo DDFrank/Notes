@@ -1,0 +1,11 @@
+select shop_price,shop_price-market_price 
+from goods
+where shop_price-market_price >= 200
+
+select stu_name,avg(score)
+having count(where score < 60)) >= 2
+
+select goods_id,cat_id,goods_name
+from goods
+where cat_id= 3
+order by shop_price desc

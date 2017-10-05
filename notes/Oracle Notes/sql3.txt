@@ -1,0 +1,287 @@
+
+
+控制用户权限
+创建用户 要有较高权健
+
+create user atguigu01
+identified by atguigu01;这是密码的设定
+
+grant create session
+to atguigu01; 赋予登录数据库权限
+
+grant create table
+to atguigu01; 赋予创建表的权限
+
+alter user atguigu01 quota unlimited 给表空间，此处为无限制 也可以将unlimited替换成5m，也就是5m空间
+
+create role my_role;  创建角色
+
+grant create session,create table,create view to my_role 赋予权限给my_role
+
+frant my_role to atguigu02;赋予角色给用户
+
+不用角色有不同的权限
+角色可以将自己的权限分配出去 需要绝对权限
+grant select ,update 赋予查询，修改权限
+on scott.employees 在scott的表employees上
+to atguigu01; 给atguigu用户
+
+grant select
+on scott.departments
+to atguigu01
+with great option 让被分配的用户也可以分配权限
+
+grant select
+on scott.departments
+to public 给所有用户权限
+
+收回对象权限
+revoke select
+on employees
+from atguigu01
+
+set运算符
+
+select employee_id,department_id
+from employee01
+union
+select employee_id,department_id
+from employee02 求两个查询结果的并集（去掉重复的数据）
+
+select employee_id,department_id
+from employee01
+union all
+select employee_id,department_id
+from employee02 求两个查询结果的并集（保留重复的数据） 
+
+两个表的项目数和数据类型必须一致
+
+select employee_id id,department_id did 起最后结果的别名只需要在上面一个表的后面取，在下面取没有效果
+from employee01
+union all
+select employee_id,department_id
+from employee02
+order by id asc 可以写排序  不写的话默认按照第一个查询中的第一个列的升序排列
+
+select employee_id,department_id
+from employee01
+intersect
+select employee_id,department_id
+from employee02 取查询结果的交集
+
+select employee_id,department_id
+from employee01
+minus
+select employee_id,department_id
+from employee02  两个查询结果的差集
+
+select employee_id,department_id,to_char(null)  由于必须上下对应，这里虚拟一个，用char类型是因为下面相对应的department_name是char数据类型
+from employee01
+union
+select to_number(null),department_id,department_name 同理这里也必须补上一个number类型的列
+from departments
+
+select 'study at' as " my dream",2 a_dummy 配合column a_dummy noprint 语句可以让这个编号列不打印
+from dual
+union
+select 'I want to',1
+from dual
+union
+select 'atguigu.com',3
+from
+order by 2 asc  需要按自己想要的顺序排列表的结果时可以自己写一个编号列，然后用它排序
+
+
+高级子查询
+
+多列子查询
+--查询与141号员工或174号员工的manager_id和deparment—_id相同的其他员工的employee_id,manager_id,department_id
+
+select employee_id,manager_id,department_id
+from employees e1
+where manager_id in ( --因为查询结果时两个id所有用in
+                      select manager_id
+		      from employees
+		      where employee_id in (141,174)
+
+                    )
+and department_id  in (
+                       select department_id
+		       from employees
+		       where employee_id in (141,174)
+ 
+                      )
+and employee_id not in (141,174) 以上是单列子查询的写法
+
+select employee_id,manager_id,department_id
+from employees e1
+where (manager_id,department_id) in ( 
+                                     select manager_id,department_id
+		                     from employees
+		                     where employee_id in (141,174)
+                                    )
+and employee_id not in (141,174) 让结果配成对来返回，此为多列子查询 前后必须对应
+
+在from子句中使用子查询
+--返回比本部门平均工资高的员工的Last_name,department_id,salary以及平均工资
+
+select last_name,department_id,salary,(select avg(salary) from employees e3 where e1.department_id = e3.department_id froup by department_id)
+from employees e1
+where salary >(
+                select avg(salary)
+		from employees e2
+		where e1.department_id = e2.department_id
+		group by department_id
+              )
+以上是旧的写法
+
+select last_name,department_id,salary,e2.avg(salary)
+from employees e1,(select department_id,avg(salary) from employees group by department_id) e2 --利用查询结果建立新表并别名e2
+where e1.fepartment_id = d2.department_id
+这是新的写法，简化了很多代码
+
+单列子查询
+--显示员工的employee_id,Last_name和Location
+--其中，若员工department_id与Location_id为1800的department_id相同，则Location为'Canada',其余则为'USA'.
+select employee_id,Last_name,
+(case department_id when (select department_id from departments where location_id = 1800)then 'Canda'
+                    else 'USA' end) location
+from employees
+
+在order by语句中使用子查询
+--查询员工的employee_id,Last_name,要求按照员工的department_name排序
+select employee_id,last_name
+from emloyees e1
+order by (
+          select department_name
+	  from departments d
+	  where e1.department_id = d.department_id
+	  ) asc
+
+
+相关子查询：按照一行接一行的顺序执行，主查询的每一行都执行一次子查询
+查询员工中工资大于本部门平均工资的员工的last_name，salary和其department_id
+select last_name,salary,department_id
+from employees outer
+where salary>(
+               select avg(salary)
+	       from employees
+	       where department_id = outer.department_id 用outer表示了内部和外部的相关性
+             )
+
+--若employees表中employee_id与job_history表中employee_id相同的数据不小于2
+--输出这些相同id的员工的employee_id,last_name和其job_id
+
+select employee_id,last_name,job_id
+from employees e1
+where 2 <=(
+            select count(*) 相同的数目有几个
+	    from job_history
+	    where employee_id = e1.employee_id
+          )
+
+EXISTS操作符
+该操作符检查在子查询中是否存在满足条件的行
+如果在子查询中存在满足条件的行：
+-不在子查询中继续查找
+-条件返回true
+如果在子查询中不存在满足条件的行：
+-条件返回false
+-继续在子查询中查找
+
+--查询公司管理者的employee_id，last_name,job_id,department_id信息
+
+select employee_id，last_name,job_id,department_id
+from employees e1
+where e1.employee_id in (
+                         select manager_id
+			 from employees e2
+			 where e1.employee_id = e2.manager_id
+                       ) 这是旧的写法
+
+
+
+select employee_id，last_name,job_id,department_id
+from employees e1
+where exists (
+               select'a' 随便找什么。得出结果不需要得出具体的值
+	       from employees e2
+	       where e1.employee_id = e2.manager_id 只要发现改行满足该条件，就输出该行信息
+	     )
+
+NOT EXISTS 与上面相反
+--查询departments表中，不存在于employees表中的部门的department_id和department_name
+select department_id,department_name
+from departments d
+where not exists(
+              select 'c'
+	      from employees
+	      where department_id = d.department_id
+            ) 这题用minus也可以做
+
+
+相关更新：使用相关子查询依据一个表的数据更新另一个表
+
+update emp01
+set department_name = ( 
+                       select department_name
+		       from departments
+		       where department_id = emp011.department_id 
+		       )
+
+相关删除;使用相关子查询依据一个表的数据删除另一个表中的数据
+
+delete from emp022
+where department_id in (
+                        select department_id
+			from emp033
+			where department_id = emp022.department_id
+                      )
+
+
+WITH子句
+-使用with子句，可以避免在select语句中重复书写相同的语句块
+-with子句将该子句中的语句块执行一次并存储于道用户的临时表空间中
+-使用with子句可以提高查询效率
+
+--查询公司中工资比Abel高的员工的信息
+select employee_id,salary
+from employees
+where salary > (
+                 select salary
+		 from employees
+		 where last_name = 'Abel'
+               ) 旧的写法
+
+with Abel_sal as (
+                  select salary
+		  from employees
+		  where last_name = 'Abel'
+                 )
+
+select employee_id,salary
+from employees
+where salary > (
+                  select salary
+		  from Abel_sal
+               )
+
+--查询公司中各部门的总工资大于公司各部门中平均总工资的信息
+with dept_sumsal as (
+select sum(salary) sum_sal,department_name
+from departments d ,employees e
+where d.department_id = e.department_id
+group by department_name
+                   ), 公司各部门的总工资
+dept_avgsal as (   连续定义不用写第二个with
+select sum(sum_sal1)/count(*) avg_sum_sal2
+from dept-sumsal
+) 这是公司的部门平均总工资
+
+select *
+from dept_sumsal
+where sum_sal1 > (
+                   select avg_sum_sal2
+		   from dept_avgsal
+                 )
+order by department_name

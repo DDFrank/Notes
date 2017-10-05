@@ -1,0 +1,435 @@
+1 认证的相关概念
+	** 匿名认证：比如网络浏览器的会话ID令牌
+
+	** 密码认证
+
+	** 用户名和密码
+
+	p703
+
+	总之认证的主要作用是为了辨识身份，搞清楚访问的人是谁
+
+2 授权
+	** 标识
+	Java 中实现 java.security.Principal ，应该先对用户进行认证，然后将结果存在 Principal， 也就是标识了
+	一个标识可以只是一个用户名，也可以是许多其它信息的组合
+	系统的任意代码都可以检查 Principal（存在于安全上下文中）的标识来判断是否通过验证
+	里面还可以存储已经被授权的操作。
+
+	P710
+
+
+3 了解 Spring Security
+	** Spring Security 提供了认证和授权服务。可以完全适应配置的方式自动完成这项服务的处理，也可以提供一些关键操作的代码，自定义其行为。
+
+	** 除了使用 JDBC 或者 自己的服务或仓库之一来认证用户，Spring Security 还提供了內建的系统用于认证和授权，该系统使用 Microsoft 的 Active Directory, Jasig 的 Central Authentication Service(CAS), Java Authentication and Authorization Service 或 JASS（一个可插拔的认证模块，或者 PAM, 实现）,LDAP 和 OpenID，所有这些都是基于声明的服务。
+
+	** Spring Security 使用的核心接口是 org.spring...security.Authentication。它拓展了 Principal，并提供了与标识相关的一些额外信息。
+
+	** Authentication 还通过 getAuthorities 方法提供了用户的 org.spring.....GrantedAuthority。
+	一个GrantedAuthority 可以是一个角色，如果使用的是基于角色的授权或者也可以是一个活动权限，如果使用的是基于活动的授权的话。（GrantedAuthority可以被用于这两种）
+
+	** 当使用一个服务（LDAP或者活动目录）进行认证时，Spring Security 将使用用户所属的目录组自动填充 Authentication 的授权信息。此时，组实际上与基于角色的认证的作用是一样的
+
+	** 另一个会经常使用的核心接口是: org.spring.security...AuthenticationProvider。它是应用程序中的认证服务的提供者
+
+4 使用 Spring Securiy 的授权服务
+	Spring Security 中有多种方式可以使用授权，而且它们并不是互斥的。
+	-> 使用全局方法安全注解，这种方式比较好，因为它可以在服务内而不是在用户界面中增强安全。
+	只需要使用几个不同的，与安全相关的注解中的一个对服务方法进行标注即可， Spring Security 将确保当前的 Authentication 含有能够执行目标方法的属性 GrantedAuthority
+
+	-> 在Spring Security 配置定义方法拦截规则。类似于面向切面编程的连接点。如同使用安全注解一样，我们可以定义拦截服务方法的规则。
+	这将采用授权规则保护代码的方法变得更具吸引力。
+	如果使用XML配置而不是注解，可以实现在不重新编译的情况下修改拦截规则。
+
+	-> 定义URL拦截规则：比较简单直观。但是有几个缺点
+		-> 只可以用于Web程序
+		-> 如果有几个web用户界面的话(Web, Rest, SOAP)的话就必须为所有的用户界面抖定义拦截规则。
+			自己定义的规则很容易出现不一致，从而出现授权的漏洞
+	
+
+	综上：使用注解和已经配置的规则来保护服务是比较好的
+
+5 Spring Security 的配置
+	Spring Security 和 Spring 的配置紧密结合在一起，并且大量使用了 ApplicationContext 来管理它的安全上下文。
+
+	可以使用 XML Java 或混合配置
+
+6 使用Spring Security 验证用户
+
+	 一般来说首先要选择并配置认证提供者
+		选择一种机制之后，接下来就需要配置它并创建安全上下文。
+
+	** 配置用户细节提供者
+		可以使用最简单的 AuthenticationProvider。其实现之一就是org.spring...DaoAuthenticationProvider。
+		该提供者的核心概念是：它将使用数据访问对象以 org.spring....UserDatailsService 实现的形式，按照用户名从数据库中获取 org.spring...UserDetails 对象。
+		该对象包含了关于用户的信息，
+		例如用户名和密码，GrantedAuthority，以及用户是否被启用，过期和锁定了。
+		这些对象共同组成了通用的验证提供者。
+		可以选择不同的默认 UserDetailService 实现。
+
+		** 开始使用 DaoAuthenticationProvider 的最简单的方式就是采用 org.spring...InMemoryUserDetailmanager ，这个是在内存里面存储用户信息的
+
+		** Spring Security 的配置
+			Spring Security 通过一系列过滤器实现进行操作，
+			这些过滤器将在幕后处理各种不同的实现细节。需要保证应用程序的所有请求都被正确的拦截，并按需要进行保护。
+			因此，不需要再单独的 DispatcherServet 应用上下文中配置Spring Security。
+			相反，应该总是在根应用上下文中配置它。
+
+			配置Spring Security 由两个关键的步骤组成: 注册过滤器和创建安全规则
+
+			-> 创建 Spring Security 过滤器
+				** 为了使用 Java 配置注册过滤器，Spring Security 提供了一个抽象的WebApplicationIntializaer 实现。
+				WebApplicationIntializaer  同时是 Spring 用于初始化 Servlet 3.0 以及新版应用程序的接口。
+				Spring 的ServletContainerInitializer 实现将发现所有的 WebApplicationIntializaer 实现并实例化它们。
+
+				综上，使用Spring Security的Java 配置时，所有需要做的就是继承 org.spring...AbstractSecurityWebApplicationInitializer。
+				它将负责正确地注册所有安全相关的过滤器。
+
+				而应用程序中的过滤器必须按照下面的顺序执行
+
+				-> 处理几乎所有类型登录的过滤器。比如登录请求或者在 Log4j2 ThreadContext 中添加鱼标签
+
+				-> 所有的Spring Security 过滤器
+
+				-> 处理安全敏感的日志的过滤器，比如 在 Log4j2 ThreadContext 中添加鱼标签。
+
+				-> 处理多租户决定的过滤器（在多租户的应用程序中，需要尽早决定请求属于哪个承租人）。
+
+				-> 按照正确的顺序执行所有其它的过滤器
+
+				** 
+				// 只要这样继承那么基本的配置就有了
+				public class SecurityBootstrap extends AbstractSecurityWebApplicationInitializer{
+
+				}
+
+				 默认的会话记录模式为只允许cookies。如果要选择别的方式需要覆盖 getSessionTrackingModes
+
+				@override
+				protected Set<SessionTrackingMode> getSessionTrackingModes() {
+					// 启用 SSL会话ID
+					return EnumSet.of(SessionTrackingMode.SSL);
+				}
+
+				P719 使用XML的方式
+
+			-> 配置登录机制和受保护的URL
+				上面那个步骤以及保证注册了过滤器，接下来应该在应用程序中配置Spring Security，并将其添加到跟应用上下文中。
+				为了简化代码，创建一个配置类，并导入到根应用上下文中
+
+				.....
+				@Import({SecurityConfiguration.class})
+				public class RootContextConfiguration implements AsyncConfigurer, SchedulingConfigurer, TransactionManagementConfigurer{
+					....
+				}
+
+
+				@Configuration
+				/*
+					** @EnableWebSecurity: 用于启用 Spring Security Web 认证和授权特性
+
+					** @EnableWebMvcSecurity:第二个注解用于启用与 Spring Web MVC 控制器有关的集成。
+
+					用SpringMVC就应该用第二个，其余用第一个
+				*/
+				@EnableWebMvcSecurity
+				// 一般情况下都继承这个类比较好
+				public class SecurityConfiguration extends WebSecurityConfigurerAdapter{
+
+					/*
+						该方法将创建用于验证用户的 AuthenticationProvider
+					*/
+					@Override
+					protected void  configure(AuthenticationManagerBuilder builder) throws Exception {
+					 //提供了两个存于内存中的用户
+						builder
+							.inMemoryAuthentication()
+								.withUser("John")
+								.password("password")
+								.authorities("USER")
+							.and()
+								.withUser("Margaret")
+								.password("green")
+								.authorities("USER", "ADMIN");
+					}
+
+					// 刚方法是为了避免 Spring Security 拦截对静态资源的访问
+					@Override
+					public void configure(WebSecurity security) {
+						security.ignoring().antMatchers("/resource/**");
+					}
+
+					// 该方法定义了几个URL模式并设置了如何保护他们
+					@Override
+					protected void configure(HttpSecurity security) throws Exception {
+						/*
+							permitAll 指示 Spring Security 允许对 /signup, /about /policies URL的访问
+
+
+						*/
+						security
+							.authorizeRequests()
+								.antMatches("/signup", "/about", "/policies").permitAll()
+								// /secure 下的资源要求有USER权限
+								.antMatches("/secure/**").hasAuthority("USER")
+								// /admin 下的资源要求有ADMIN权限
+								.antMatches("/admin/**").hasAuthority("ADMIN")
+								.anyRequest().authenticated()
+							// formLogin 通过登录表单的方式配置用户名和密码认证的过程。
+							// 它创建了登录表单所需要的URL，在已提交登录表单中的用户名和密码的请求参数的名称
+							.and().formLogin()
+								.loginPage("/login").failureUrl("/login?error")
+								.defaultSuccessUrl("/secure/")
+								.usernameParameter("username")
+								.passwordParameter("password")
+								.permitAll()
+							// 触发退出操作的的URL，该操作显然无需认证
+							.and().logout()
+								.logoutUrl("/logout").logoutSuccessUrl("/login?loggedOut")
+								.invalidateHttpSession(true).deleteCookies("JESSIONID")
+								.permitAll()
+							// 禁用 csrf 保护
+							.and().csrf().disable();
+
+					}
+				}
+
+				P722 XML的配置
+
+			-> 创建会话固定攻击保护
+				Spring Security 提供了內建的工具，用于弱化这些攻击
+
+				....
+				@EnableWebMvcSecurity
+				public class SecurityConfiguration extends WebSecurityConfigurerAdapter{
+					..
+					@Override
+					protected void configure(HttpSecurity security) throws Exception{
+						...
+							.invalidateHttpSession(true).deleteCookies("JESSIONID")
+							.permitAll()
+						/*
+							获得会话管理配置
+						*/ 
+						.and().sessionManagement()
+							// 使用 changeSessionId的方式防止会话固定攻击。这不是必须的做法
+							/*
+								默认情况下将使用Servlet容器上的机制
+								可以选择:
+								newSession: 创建新的会话，但是不复制现有的会话特性
+								migrateSession:它将创建新的会话并复制所有现有的特性。
+								none: 禁用会话固定攻击保护
+							*/
+							.sessionFixation().changeSessionId()
+						.and().csrf().disable();
+					}
+				}
+
+				p724 XML的配置
+
+			-> 限制会话用户的数量
+
+				....
+				@EnableWebMvcSecurity
+				public class SecurityConfiguration extends WebSecurityConfigurerAdapter{
+					..
+					@Override
+					protected void configure(HttpSecurity security) throws Exception{
+						...
+							.invalidateHttpSession(true).deleteCookies("JESSIONID")
+							.permitAll() 
+						.and().sessionManagement()
+							.sessionFixation().changeSessionId()
+							/*
+								只有一个人能用
+								默认的行为是:
+								如果用户再次登录就让现有的会话过期。在本例中，如果原有会话的持有者再次登录，将被重定向至 /login?maxSessions
+
+								.maximumSessions(1).maxSessionsPreventsLogin(true)
+
+								这样配置的话可以阻止二次登录，并返回一个未授权的响应，允许保持原有会话不变
+							*/ 
+							.maximumSessions(1).expiredUrl("/login?maxSessions")
+						.and().csrf().disable();
+					}
+				}
+
+				p725 XML配置
+
+				** 这个配置还可以选择是否在不改变默认固定会话攻击保护的情况下，启用会话并发控制。
+				保留 sessionFixation().option() 的代码
+
+				然后启用并发控制，需要配置一个特殊的Spring Security 监听器。它们将发布HttpSession相关的事件
+				通过这种方式Spring Security 将构建出一个会话注册表，它可以使用该注册表检测并发会话。
+
+				启用该监听器最简单的方式时覆盖 SecurityBootstrap 类中的 enableHttpSessionEventPublisher 方法
+
+				public class SecurityBootstrap extends AbstractSecurityWebApplicationInitializer {
+					@Override
+					protected boolean enableHttpSessionEventPublisher() {
+						return true;
+					}
+				}
+
+				P725 XML配置
+
+			** 使用JDBC用户细节服务
+				如果在数据库中存储了用户信息，那么 org.spring....JdbcUserDetailsManager 将提供一种简单的机制，用于从数据库中获得UserDetails 对象。为它设置一个数据源，并配置相关的SQL查询，用于从数据库中获得用户和他们的许可。
+
+				@Configuration
+				@EnableWebMvcSecurity
+				public class SecurityConfiguration extends WebSecurityConfigurerAdapter
+				{
+					...
+					@Inject DataSource dataSource;
+
+					@Override
+					protected void configure(AuthenticationManagerBuilder builder) throws Exception {
+						builder
+							.jdbcAuthentication()
+								.dataSource(this.dataSource)
+								/*
+									该SQL查询结果必须返回一个结果集，其中应该包含用户名，密码和启用禁用标志等列（按照这个顺序）
+									查询参数为用户名
+								*/
+								.usersByUsernameQuery("Select username, password, enabled From User where username = ?"
+								/*
+									这个SQL查询必须返回一个结果集，其中包含用户名和授权名称等列（按照这个顺序）。
+									查询参数为用户名
+								*/
+								.authoritiesUsernamQuery(Select username. permission from userpermission where username = ?)
+								// 提供正确的密码解析器
+								.passwordEncoder(new BCryptPasswordEncoder());
+					}
+					...
+				}
+
+				p727 XML配置
+
+			** 使用其他用户服务细节
+				除了JdbcuserDetailsManager,还有 org.spring...ldapUserDetailsManager 和 LdapUserDetailsService。不过这些类完全是用于信息检索的。不能将它们用于真正的验证过程，因为它们不能从LDAP提供者中获得密码。需要自己实现UserDetailService
+
+				....
+				public class SecurityConfiguration extends WebSecurityConfigurerAdapter
+				{
+
+					....
+
+					@Inject MyUserDetailsService myUserDetailService;
+
+					@Override
+					protected void configure(AuthenticationManagerBuilder builder) throws Exception{
+						builder.userDetailService(this.myUserDetailService)
+							.passwordEncoder(new BCryptPasswordEncoder());
+					}
+				}
+
+		** 使用 LDAP 和 活动目录提供者
+		 使用DaoAuthenticationProvider 类和对应的 UserDetailsService 接口是非常方便的，这样可以快速地启动 Spring Security，不过现实中的应用程序需要更复杂的认证机制。
+
+		 使用轻量级目录访问协议（LDAP）的声明认证就是其中的一个例子。对于该认证，Spring Security 提供了 org.spring....LdapAuthenticationProvider。
+		 这个提供者是必须的，因为并不是总是能够从LDAP服务器中获得密码（哈希密码或者其它密码）。
+		 例如，最常见的认证策略被称为绑定，用户登录LDAP服务器，并创建自己的身份。
+		 LdapAuthenticationProvider 将直接使用LDAP服务器进行认证，而不是将用户重定向至认证服务器。
+		 有几个可用的选项，不过一般不需要直接配置。可以使用Java或者XML配置方式
+
+		@Configuration
+				@EnableWebMvcSecurity
+				public class SecurityConfiguration extends WebSecurityConfigurerAdapter
+				{
+					...
+					@Override
+					protected void configure(AuthenticationManagerBuilder builder) throws Exception{
+						builder
+							.ldapAuthentication()
+								/*
+									使用空格分隔的URL指定用于冗余和高可用性的多台服务器，合适LDAP的约定
+									P728，要了解LDAP的概念
+								*/
+								.contextSource()
+									.url("ldap://ldapl.example.org:389/dc=example,dc=orgldap://ldap2.example.org:389/dc=example, dc=org")
+									.managerDn("uid=admin,ou=system")
+									.managerPassword("bindPassword")
+									.and()
+								.userSearchFilter("uid={0}")
+								.userSearchFilter("ou=people")
+								.groupSearchBase("ou=groups");
+					}
+
+				}
+
+				p728 XML配置
+
+		** 使用OpenID进行认证
+			需要了解OpenID
+			P730
+
+
+		** remember-me 认证
+			Spring Security 通过一个特殊的org.spring....RememberMeAuthenticationProvider 提供 remember-me 认证。
+			如果决定启用该服务，要在页面上添加一个名为 remember-me 的复选框。XML配置时名字为 _spring_security_remember_me。
+			然后在配置中切换为 remember-me 服务:
+
+
+			@Configuration
+			@EnableWebMvcSecurity
+			public class SecurityConfiguration extends WebSecurityConfigurerAdapter
+			{
+				..
+				@Override
+				protected void configure(HttpSecurity security) throws Exception{
+					...
+						.maximumSession(1).maxSessionsPreventsLogin(true)
+						.and().and().csrf().disable()
+						.rememberMe().key("myApplicationName");
+				}
+				....
+			}
+
+			P733 XML配置
+
+			如果使用SSL进行登录，那么为了增加安全性，应该将 useSecureCookie 设置为真。这可以禁止攻击者获得用户的 remember-me cookie 的多种方式中的一种，还可以使用 tokenValiditySeconds 控制 remember-me 令牌多长时间过期。
+			为了正常工作，必须提供一个UserDetailService 实现，没有这个类就无法正常运作 remember-me 服务。
+
+			作者建议不要使用 remember-me 服务
+
+		** 其它认证提供者
+			p734
+
+
+7 编写自己的认证提供者
+	可以编写自己的AuthenticationProvider
+		p734 出于某种原因需要将日志过滤器拆分成两个过滤器，来保证按照正确的顺序启动所有的过滤器
+		主要是希望在Spring Security过滤器之后也能运行鱼标签代码
+	
+	** 以正确的顺序启动
+
+		-> 拆分日志过滤器
+			使用 PreSecurityLoggingFilter 和PostSecurityLoggingFilter 替换 LoggingFilter。前面那个负责创建鱼标签，并在请求完成时同时清空鱼标签和用户名
+
+			p734
+
+		-> 对多个启动类进行排序
+
+			先注册 PreSecurityLoggingFilter 然后注册 Spring Security 过滤器链
+			最后注册 PostSecurityLoggingFilter。
+
+			对几个 Spring Framework WebApplicationIntializaer进行排序的方式很简单，在过滤器类上添加 @org.spring....Order 注解并注明启动顺序即可.值越小优先值越大
+
+			@Order(1)
+			public class FrameworkBootstrap implements WebApplicationIntializer{
+				....
+			}
+
+			p736
+
+	** 创建和配置提供者
+		因为在应用程序中将使用Userprincipal 实体作为身份，所以实现Authentication 的最简单方式就是更新 UserPrincipal 。
+		接着可以在 AuthenticationProvider 实现中返回。
+
+		-> 转换用户主体和认证服务
+			UserPrincipal 的大部分内容都保持不变。其映射是相同的
+			唯一的重要改动就是在Authentication 中添加了 getAuthorities,getPrincipal,getDetails,getCredentials,isAuthenticated和 setAuthenticated 方法。它们的实现都是模板化的。
+
+			最重要的改动是在 Authenctication 接口和 DefaultAuthenticationService 实现中。现在 AuthenticationService 拓展了AuthenticationProvider 并覆盖了它的 authenticate 方法，用于表明该提供者只返回 UserPrincipal

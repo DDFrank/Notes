@@ -1,0 +1,386 @@
+
+
+一 视图 view
+视图是由查询结果形成的一张虚拟表
+
+视图的创建语法：
+
+create view 视图名 as select 语句
+
+视图删除语法：
+drop view 视图名
+
+为什么需要视图
+1 简化查询操作
+
+2 可以进行权限控制
+  把表的权限封锁，但是开放相应的视图权限，视图里只开放表里的部分列
+  和部分数据
+
+3 大数据分表时可以用到
+  比如表的行数超过200万时，速度就会明显变慢
+  可以把一张表的数据拆成四张表来存放。
+
+  把一张表的数据分散到4张表里，分散的方法很多，
+  最常用可以用id取模来计算。
+  id%4+1=[1,2,3,4]
+
+  比如 $_GET['id'] = 17
+  17%4+1 = 2 $tableName = 'news'.'2'
+   由此形成select语句
+   select * from new2 where id = 17 
+
+   还可以用视图，把四张表来形成一张视图
+   create view news as select from n1 union select from n2 union……
+
+   视图的修改
+   alter view as select子句
+   
+
+   视图与表的关系
+   因为视图是表的查询结果，所以表的数据的改变会与视图的数据联动
+
+   视图的增删改也可以影响到表
+   但是视图并不是总是能成功的增删改
+
+   视图的数据与表的数据时一一对应时，数据可以修改
+   对于视图insert还必须注意
+   视图必须包含所有表中没有默认值的列
+
+
+   视图的algorithm
+   Algorithm = merge/temptable/undefined
+
+   merge:当引用视图时，引用视图的语句与定义的视图的语句合并
+   temptable:当引用视图时，根据视图的创建语句建立一个临时表
+   undefined；未定义，自动让系统选择
+
+   merge,意味着视图只是一个规则，语句规则，当查询视图时，
+         把查询视图的语句（比如where那些）与创建时的语句where子句等合并分析
+	 形成一条select语句，再用这个语句去查原表
+
+   temptable时根据语句瞬间创建一张临时表，
+   然后查询视图的语句从该临时表查询数据
+
+   写法如下
+   create  algorithm=merge/temptable/undefined view as ……
+
+二 字符集与校对集
+   crare table 表名（
+   列声明
+   ）charset utf8
+
+   Mysql的字符集设置非常灵活
+   可以设置服务器默认字符集
+   数据库默认字符集
+   表默认字符集
+   列字符集
+   如果某一级别没有指定字符集，则继承上一级
+
+   以表声明utf8为例子
+   存储的数据在表中，最终是utf8
+
+   character_set_client 告诉服务器，发送的数据时是什么编码的
+   character_set_connection 告诉转换器，转换成什么编码？
+   character_set_results 查询的结果用什么编码？
+
+   如果以上三者都为字符集N 则可以简写为set names N
+
+
+   推论：什么时候会产生乱码？
+   1:client 声明与事实不符合
+   2:results与客户端页面不符合的时候
+   
+   什么时候会丢失数据？
+   1：connetion和服务器的字符集比client小时
+
+
+   校对集
+   指字符集的排序规则
+   一种字符集可以有一个或多个排序规则
+   
+   以utf8为例，我们默认使用的是utf8-general_ci规则
+   也可以按二进制排 utf8_bin
+
+   如何声明校对集？
+   create table()……charset utf8 collate utf8_general_ci;
+
+   注意：声明的校对集必须是字符集合法的校对集。
+
+三 触发器 trigger
+   能够监视三种操作：增 删 改
+   可以触发三种：增 删 改
+
+   四要素：
+   监视地点：……表
+   监视操作：增删改
+   监视时间：before/after
+   触发操作：增删改
+
+   写法：
+   create trigger triggerName
+   after/before insert/update/delete on 表名
+   for each row（写死的，orcale的话可以设定）
+   begin 
+   sql语句（一句或多句增删改语句）
+   End
+
+   删除也是drop drop trigger 触发器名
+
+   查看触发器
+   show triggers
+
+   因为end后面需要分号，sql语句后面也需要分号隔开
+   因此在写触发器之前先设置分隔符
+   delimite $ 
+   然后sql语句用分号，end后面用$
+
+   如何在触发器引用行的值？
+   对于insert而言，新增的行用new来表示
+   行中每一列的值，用 new.列名 来表示。
+
+   create trigger A
+   after insert on B
+   for each row
+   begin
+   update B set num = num-new.much where id = new .gid;(通过两表的列名来计算)
+   ends$
+   添加订单，库存减少
+
+   create trigger A
+   after delete on B
+   for each row
+   begin
+   update B set num = num+old.much where id = old.gid;(通过两表的列名来计算)
+   ends$
+   删除订单，库存增加 （被删掉的那行用old表示）
+
+   create tigger A
+   after update on B
+   for each row
+   begin
+   update B set num = num-(new.much-old.much) where id = new.gid;
+   end$
+   修改前的列名为old，修改后的列名为new
+
+
+   before 和 after 的区别
+   after是先完成数据的增删改，然后再触发
+   即触发中的语句晚于增删改，不能影响前面的增删改动作
+
+   before是先完成触发，再增删改
+   触发的语句先于监视的增删改发生，这说明，我们有机会
+   判断，修改即将发生的操作
+
+   典型案例：
+   对于所下订单进行判断，如果订单的数量>5，就认为是恶意订单。
+   强制把所订的商品数量改成5.
+   create trigger A
+   before insert on B
+   for each row
+   begin
+     if new.much > 5 then
+        set new.much = 5;
+     end if;
+     update g set num = num-new.much where id = new.gid;
+     end$
+
+
+四 存储引擎
+数据库对同样的数据，有着不用的存储方式和管理方式，在mysql中，
+称为存储引擎
+
+常用的表引擎
+Myisam
+批量插入速度高，不支持事务安全，支持全文索引，表锁
+
+
+InnoDB
+批量插入速度低，支持事务安全，支持全文索引（5.5版本开始支持），行锁
+
+五 事务
+通俗的说：就是指一组操作，要么都成功执行，要么都不执行,即原子性不可在分割
+在所有操作没有执行完毕之前，其它会话不能够看到中间改变的过程，即隔离性
+事务发生前和发生后，数据总额依然匹配，即一致性
+事务产生的影响不能够撤销，即持久性
+如果出了错误，事务也不允许撤销，只能通过‘补偿性事务’
+
+关于事务的引擎
+选用InnoDB/bdb（后者用的不多）
+
+create table account(
+id int,
+name varchar(10),
+money int
+)engine=innodb charset=utf8;
+
+开启事务
+start transaction;之后下面写的sql语句会被并为事务
+sql……
+sql……
+
+操作结束后选择
+commit 提交操作
+rollback 回滚
+
+注意：当一个事务 commit或rollback之后，这个事务就结束了
+      再使用还要再开启
+ 
+注意：有一些语句会造成事务的隐式的提交，比如开启事务语句
+
+事务的基本原理
+开启事务后，写好的sql语句的影响会先写入一个事务日志文件不动，
+之后根据提交或者回滚来执行操作
+
+六 备份与恢复
+系统运行中，增量备份与整体备份
+比如，每周日整体备份一次，周一到周六备份当天
+如果周五出了问题，可以用周日的整体+周一，二，三，四来恢复
+
+备份的工作
+
+Mysql自带的Mysqldump可以导出
+库
+表
+
+cmd下输入
+Mysqldumo -u用户名 -p密码 库民 表1 表2 表3 > 保存地址/备份文件名称
+
+导出的是建表语句及insert语句
+
+如何导出一个库下面所有的表？
+只要不写表名就会导出所有表
+
+如何导出一个库？
+ Mysqldump -u用户名 -p密码 -B(表示以库为单位) 库1 库2 库3 >保存地址/备份文件名称
+
+ Mysqldumo -u用户名 -p密码 -A>保存地址/备份文件名称  这个可以导出所有库
+
+ 恢复操作
+  1：登录到mysql命令行
+  如果是以库为单位导出的sql文件
+  source > 保存地址/备份文件名称;(要加分号)
+  这个命令就开始执行一大堆sql语句了
+  
+  对于表级的备份文件
+  mysql>use 库名 先选中库
+  mysql> source > 保存地址/备份文件名称;(要加分号)
+  
+  2：不登录到mysql命令行
+  针对库级的备份文件
+  mysql -u用户名 -p密码 < 库级备份文件地址
+
+  针对表级的备份文件
+  mysql -u用户名 -p密码 库名< 库级备份文件地址
+
+
+七 索引
+
+
+使用原则：
+1 不要过度索引
+2 索引条件列（where后面最频繁的条件比较适合索引）
+3 索引散列值，过于集中的值不要索引（比如性别的男女），没有意义
+
+索引的类型
+
+普通索引：index 仅仅是加快查询速度
+唯一索引：unique index 行上的值不能重复
+主键索引：primary key 主键不能重复
+    主键必定唯一，但是唯一索引不一定是主键
+    一张表上只能有一个主键，但是可以有一个以上的唯一索引
+全文索引：fulltext index
+
+查看一张表上的所有索引
+show index from 表名
+
+建立索引
+
+alter table 表名 add index/unique/fulltext
+索引名字（可选） (列名) 列名必须写
+
+主键写法
+Alter table 表名 add primary key(列名)//因为主键只有一个，所以不用加列名
+
+删除索引
+
+alter table 表名 drop index 索引名
+
+主键的删除
+alter table 表名 drop primary key
+
+案例：
+设有新闻表15列，10列上有索引共500w行数据，如何快速导入？
+1：把空表的索引全部删除
+2：导入数据
+3：数据导入完毕后集中建索引
+
+
+全文索引：只能在imyisam引擎下
+          在mysql的默认情况下，对于中文的意义是不大的
+	  因为英文有空格来区分单词，进而对单词进行索引
+	  而对于中文，没有空格来隔开单词，因为mysql无法识别每个
+	  中文词
+
+关于全文索引的用法
+match(全文索引名) against ('keyword')
+
+关于全文索引的停止词
+全文索引不针对非常频繁的词做索引
+如this,is,you,my等等
+
+
+八 存储过程 procedure
+概念类似于函数，就是把一段代码封装起来，
+当要执行这一段代码的时候，可以通过调用该存储过程来实现
+在封装的语句体里面，可以用if/else,case,while等控制结构
+可以进行sql编程
+
+查看现有的存储过程
+show procedure status
+
+删除存储过程
+drop procedure
+
+delimiter $
+create procedure p1()
+begin
+ select * from g;
+end$
+
+调用存储过程
+call 存储过程名字();
+
+create procedure p2(n int)
+begin
+   select * from g where num  > n;
+ends$
+
+create procedure p3(n int,j char(1))
+begin
+     if j ='h' then
+     select * from g where num > n;
+     else
+     select * from g where num < n;
+     end if;
+ends$
+
+计算1到n的和
+create procedure p4(n smallint)
+begin
+    declare i int;(declare声明的意思)
+    declare s int;
+    set i =1
+    set s = 0;
+    while i <= n 
+    do
+    set s=s+i
+    set i=i+1
+    end while;
+    select s;
+ends$
+
+
+在mysql中，存储过程的区别
+一个是名称不同，函数是function
+二是存储过程没有返回值

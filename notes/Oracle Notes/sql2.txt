@@ -1,0 +1,371 @@
+一 创建和管理表
+
+常见的数据库对象
+表 基本的数据存储集合，有行和列组成
+视图 从表中抽出的逻辑上相关的数据集合
+序列 提供有规律的数值
+索引 提高查询的效率
+同义词 给对象其别名 
+
+命名规则
+表名和列名必须
+   以字母开头
+   在1-30个字符之间
+   只能包含A-Z,a-z,0-9,_,$,#,
+   必须不能和用户定义的其它对象重名
+   必须不能是orclae的保留字
+
+crate table 语句
+
+crate table emp1(
+id number(10),//列名 数据类型 （占用多少数据空间 10 相当于10个9的空间，也就是最大）
+name varchar2(20), 
+salary number(10,2),//后面的2表示带2位小数，也就是整数位只有8位
+hire_date date) //不用声明其它的了
+以上为创建表的第一种方式 白手起家式
+
+create table emp2
+as
+select employee_id id,last_name name,hire_date,salary
+from employees 这种是依托别的表格建立新的表格，为第二种方式，这种方式下也会copy全部数据
+                若想要数据为空 则可以来一个没有数据的过滤条件，比如department_id = 100 或者干脆where 1 =2 
+
+
+alter table语句
+
+alter table emp1
+add(email varchar2(20)) 增加一列
+
+alter table emp1
+modify(salary number(20,2) default 2000) 给slary增加一个默认值
+
+若要更改列的数据类型，则要修改的该列必须为空
+
+alter table emp1
+drop column email 删除 列 email
+
+alter table emp1
+rename column salary to sal 重命名一个列
+
+drop table emp2 删除一个表 不可回滚
+
+truncate table emp1 清空一个表的数据 不可回滚
+
+rename emp1 to emp2; 重命名 注意不用写table
+
+alter table emp3
+set unused column test 将一个列设置为不可用
+
+以上这些DDL明明操作完都不可以回滚
+
+二 数据处理 
+insert语句语法 
+一次只能向表中插入一条数据
+ insert into emp1
+values(1001,'AA',sysdate,10000) 这样写是插入一行，注意格式得以表的格式一致，一列都不能遗漏
+
+insert into emp1(employee_id,last_name,hire_date)
+values(1003,'CC',to_date('1991-12-21','yyyy-mm-dd')) 可以指定添加相应的列数 
+字符和日期型数据应包含在单引号中
+
+
+insert into emp1(employee_id,hire_date,last_name,salary)
+select employee_id,hire_date,last_name,salary
+from employees
+where department_id = 80 从其他表中插入数据，需要一条条对应
+
+insert into emp1(employee_id,last_name,salary,hire_date)
+values(&id,'%name',&salary,'&date') 此为创建脚本的插入数据方法，输入后会逐行输入值然后插入一条数据
+
+更新数据
+update emp1
+set salary = 12000
+where employee_id =179  不写过滤条件会默认修改改列所有数据 可以回滚
+
+更改后写 commit 则会提交，相当于写死了，不可以回滚
+
+update employees
+set salary =(
+              select salary
+              from employees
+              where employee_id = 205
+            )
+where employee_id = 114 更新数据可以使用子查询
+
+update employees
+set department_id = (
+                     select department_id
+                     from employees
+                     where employee_id =100
+                     )
+where job_id =(
+                select job_id 
+                from employees
+                where employee_id =200
+               )   这样也可以
+
+
+删除数据
+delete from table
+(where )不过滤将会清空数据
+
+delete from emp1
+where department_id = (
+                        select department_id
+                        from departments
+                        where department_name like '%Public%'
+                      )
+不能删除有子记录的数据，比如不能删除有员工的部门
+
+以上增删改的操作属于DML语句，可以回滚，如果提交则写死
+
+
+数据库事务
+
+1 事务：一组逻辑操作单元，使数据从一种状态变换到另一种状态。
+ 数据库事务由以下的部分组成：
+ --一个或者多个DML语句
+ --一个DDL语句 数据定义语言
+ --一个DCL语句 数据控制语言
+
+2 以下面的其中之一作为结束：
+-commit或者rollback语句
+-DDL语句（自动提交）
+-用户会话正常结束
+-系统异常终止
+
+可以再增删改操作中插入savepoint作为保存
+比如删除一个数据 105
+输入 savepoint A;
+再删除一个数据 104
+输入 rollback to savapoint A 则数据回到105
+
+
+
+约束
+约束是表级的强制规定
+有以下五种约束
+-not null 不能为空
+-unique 唯一
+-primary key 主键
+-foreign key 外键
+-check 检查条件
+
+如果不指定约束名，orcale server会自动按照SYS_cn的格式指定约束名
+
+创建和修改约束：
+—建表的同时
+—建表之后
+可以在表级或者列级定义约束
+可以通过数据字典视图查看约束
+
+列级约束只能作用在一个列上
+表级约束可以作用在多个列上
+
+列约束必须跟在列的定义之后，表约束则单独定义
+not null只能约束在列上
+
+create table emp2(
+id number(10) comstraint emp2_id_nn not null,给约束起名字
+name varchar2(20) not null,
+salary number(10,2)
+)
+
+
+unique约束
+create table emp3(
+--列级约束
+id number(10) constraint emp3_id_uk unique,不能有重复数据 但可以有多个NULL值
+name varchar2(20) constraint emp3_name_nn not null,
+email varchar2(20) constraint emp3_email_uk unique，
+salary number(10,2),
+--表级约束
+contraint emp3_email_uk unique(email)指明作用于哪个列
+)
+
+主键
+create table emp4(
+--列级约束
+id number(10) constraint emp4_id_pk primary key,如此定义主键，主键默认非空且唯一
+name varchar2(20) constraint emp4_name_nn not null,
+email varchar2(20) constraint emp4_email_uk unique，
+salary number(10,2),
+--表级约束
+constraint emp4_email_uk unique(email),
+constraint emp4_id_pk primary key(id) 主键表级写法
+)
+
+外键
+create table emp5(
+--列级约束
+id number(10) constraint emp5_id_pk primary key
+name varchar2(20) constraint emp5_name_nn not null,
+email varchar2(20) constraint emp5_email_uk unique，
+salary number(10,2),
+department_id number(10),
+--表级约束
+constraint emp5_email_uk unique(email),
+constraint emp5_id_pk primary key(id)
+constraint emp5_dept_id_fk foreign key(department_id) references departments(department_id) 与别的表相连接的外键
+在此约束条件下插入的数据必须在父表中存在
+)
+
+当父表中的列被删除时，子表中相对应的列也被删除 此为级联删除 on delete cascade
+子表中相应的列置空 此为级联置空 on delete set null
+写法
+constraint emp5_dept_id_fk foreign key(department_id) references departments(department_id) on delete set null 直接在这里写
+
+check约束
+salary number(10,2) constraint emp8_salary check(salary>1500 and salary <30000),插入数据时会检查数据是否符合条件
+
+添加约束的语法
+使用alter table语句
+--添加或删除约束，但是不能修改约束
+--有效化或者无效化约束
+--添加not null约束要要modify语句
+
+alter table emp5
+modify(salary number(10,2)not null) 添加了一个非空约束
+
+alter table emp5
+drop constrint emp5_name_nn 用约束名字来删除约束
+
+alter table emp5
+add constraint emp5_name_uk unique(name) 用add语句添加了unique约束
+
+alter table emp3
+disable contraint emp3_email_uk 使该约束无效化
+
+alter table emp3
+enable constraint emp3_email_uk;要使约束有效化必须先保证数据在约束范围内，比如unique的话就不能有相同数据存在
+
+
+视图 view
+视图是一个虚表
+视图建立在已有表的基础上，视图赖以基础建立的这些表称为基表。
+向视图提供数据内容的语句为selet语句，可以将视图理解为存储起来的select语句。
+视图向用户提供基表数据的另一种表现形式
+
+create view empview
+as
+select employee_id,last_name,salary
+from employees
+where department_id = 80 创建视图需要相应的权限
+
+update empview
+set salary =20000
+where employee_id =179 修改与表的很类似
+
+delete from empview
+where employee_id  = 176 删除方法与表的很类似
+
+create or replace view emview2 创建或者覆盖表格
+as
+select employee_id id,last_name name,salary,department_name
+from employees e,departments d
+where e.department_id = d.department_id 也可以基于多个表创建视图
+with read only 防止数据被修改
+
+create or replace view empview3
+as
+select department_name,avg(salary) avg 实际中不存在该列，所以必须起别名
+from employees e,departments d
+where e.department_id = d.department_id
+froup by department_name
+
+当视图定义中包含有以下元素之一时不能使用delete
+-组函数
+-group by 语句
+-distinct 关键字
+-rownum 伪列
+
+drop view empview 删除视图与删除表相似
+
+top-n分析
+表示分析查询一个列中最大或者最小的n个值，最大和最小的值得集合时top-n分析所关系的
+select rownum ,employee_id,last_name,salary
+from(
+     select employee_id,last_name,salary 建立一个伪列
+     from employees
+     order by salary desc
+    )
+where rownum <=10 对rownum 只能使用<或者<=，而用=，>,<=都将无法返回数据
+
+select rn,employee_id,last_name,salary 使用伪列，这时候伪列就是一个真实存在的列了
+from(
+    select rownum rn, employee_id,last_name,salary 给伪列起一个别名
+    from(
+         select employee_id,last_name,salary 
+         from employees
+         order by salary desc
+    )
+)
+where rn >40 and rn<=50 此时就可以写大于符号
+
+其它数据库对象
+序列 Sequences
+可供多个用户用来产生唯一数值的数据库对象
+-自动提供唯一的数值
+-共享对象
+-主要用于提供主键值
+-将序列值装入内存可以提高访问效率
+
+定义序列
+create sequence empseq
+increment by 10  每次增长10
+start with 10  从10开始增长
+maxvalue 100 提供的最大值
+minvalue 10 提供的最小值
+cycle 需要循环
+nocache 不需要缓存登录
+
+select empsq.nextval from dual 显示下一个值，在最开始时必须使用这个
+
+select empsq.currval from dual 显示当前值
+ 
+insert into emp01
+values(empseq.nextval,'bb',2500)用序列的方法产生主键来插入数据
+
+alter sequence empseq
+increment by 1
+bocycle  修改序列 但是改变序列的初始值只能通过删除序列之后重建序列的方法实现
+
+
+序列在下列情况下会出现裂缝（就是序列的中出现了不连续的部分）
+-回滚
+-系统异常
+-多个表同时使用同一序列（尽量各个表用各自的序列）
+
+drop sequence empseq 删除序列
+
+
+索引
+-一种独立于表的模式对象，可以存储在与表不同的磁盘或表空间中
+-索引被删除或损坏，不会对表产生影响，其影响的只是查询的速度
+-索引一旦建立，orcale管理系统会对其进行自动维护，而且有orcale管理系统决定何时使用索引。
+ 用户不用再查询语句中指定使用哪个索引
+- 在删除一个表时，所有基于该表的索引会自动被删除
+-通过指针加速orcale服务器的查询速度
+-通过快速定位数据的方法，减少磁盘IO
+
+
+自动创建：在定义primary key或者unique约束后系统自动在相应的列上创建唯一性索引
+
+手动创建：
+create index emp01_id_ix
+on emp01(employee_id)    在哪个列上创建      
+
+drop index emp01_id_ix
+
+什么时候创建索引：
+-列中的数据值分布范围很广
+-列经常在where子句或连接条件中出现
+-表经常被访问而且数据量很大，访问的数据大概占数据总量的2%到4%
+
+同义词 synonym 为数据库对象起同义词
+-方便访问其他用户的对象
+缩短对象名字的长度
+
+create synonym e for employees;相当于表外也可以使用的表的别名
+
+删除还是drop

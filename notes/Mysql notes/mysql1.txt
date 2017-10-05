@@ -1,0 +1,285 @@
+
+一 基本语句
+mysql -h localhost -u root -p 之后键入密码 -h 如果不写默认连接Localhost
+
+1  show databases ; 显示当前服务器之下有几个表
+
+2 use DBName 选择相应的数据库
+
+3 show tables 查看库下面的表
+
+4 drop database DBName 删除一张表
+
+5 mysql数据库的名字无法修改
+
+6
+create table class(
+stu int,
+name varchar(20),
+age int,
+area varchar(20)
+); 创建一个表，这个写法有很多优化不够的部分
+
+7
+
+create table score(
+stu int,
+name varchar(20),
+subject varchar(10),
+fen int
+);
+
+8 rename table oldName to newName
+
+rename table score to newscore 修改表名
+
+9 drop table Name 删除表
+
+10 description class;描述表的内容 可以写成desc class
+
+11 为留言本建一张表
+ID:Title,name,content
+
+create table msg(
+id int,
+title varchar(60),
+name varchar(10),
+content varchar(1000)
+);
+
+二 基本增删改查
+1  插入数据
+
+insert into msg  
+(id,title,name,content)  
+values
+(1,'初来乍到','张三','当老大？');
+
+2 解决字符集问题
+windows下DOS命令行默认字符集为GBK
+因为需要声明字符集
+Set names GBK
+
+insert into msg
+(id,title,name,content)
+values
+(2,'又来了','李四','你只能千年老二');
+
+3 修改数据
+
+update msg
+set 
+content = '能不能当老大'
+where
+name = '张三'
+;
+
+insert into msg
+(id,title,name,content)
+values
+(3,'3标题','刘备','雌雄剑'),
+(4,'4标题','关羽','青龙偃月刀'),
+(5,'5标题','张飞','丈八蛇矛')
+;
+连续插入多行数据的写法
+
+
+
+
+4 删除数据的写法
+delete from msg
+
+where id = 2
+;
+
+5 基本的查询
+select  id,title from msg;
+
+三 整型列的字节与存储范围
+
+整型：tinyint
+      smallint
+      mediumint
+      int
+      bigint
+
+      tinyint 微小的类型，1字节
+      
+
+      类型      字节   位     无符号       有符号
+      Tintiny   1      8      0~255        -128~127
+      Smallint  2      16     0~2^16-1     -2^15~2^15-1
+      Mediumint 3      24     0~2^24-1     -2^23~2^23-1
+      int       4      32     0~2^32-1     -2^31~2^31-1
+      bigint    8      64
+
+
+ create table class1(
+ id int primary key auto_increment,
+ name varchar(10),
+ age tinyint
+ )charset utf8;
+
+ insert into class1
+ (name,age)
+ values
+ ('zhangsan',25);
+
+ insert into class1
+ (name,age)
+ values
+ ('lisi',127);  tinyint 默认是有符号的，因此最大才能到127
+
+ 四 整型列的可选属性
+1 tinyint(M) usigned zerofill
+
+M: 宽度（在0填充，也就是zerofill的时候才有意义） 不影响存储范围
+unsigned:无符号类型（非负） 影响存储范围的
+zerofill:0填充，（默认无符号） 规定一个长度，不够的位数用0填充
+
+2 default 列的默认值 
+ 列可以声明默认值，并且推荐声明默认值
+ not null default 0
+
+ alter table class add age3 tinyint not null default 0; 默认初始值为0
+
+ 五 浮点列
+ 1 Float(M,D) (浮点型)
+ M:精度 （总位数，不包含点）
+ D:标度 （小数位）
+ (6,2) 表示-9999.99~9999.99  不需要负数可以加unsigned
+ orcale 和 sqlserver都不允许指定浮点型的小数位
+
+ 2 decimal （定点型） 这个更精确
+ M，D同上
+
+
+ create table goods(
+ name varchar(10) not null default '',
+ price float(6,2) not null default 0.00
+ );
+
+insert into goods
+(name,price)
+values
+('跑步机','588.987');
+
+
+alter table goods
+add bigprice float(9,2) not null default 0.0
+;
+
+alter table goods
+add decipriice decimal(9,2) not null default 0.0
+;
+
+insert into goods
+(name,bigprice,decipriice)
+values
+('自行车',1234567.23,1234567.23);
+
+
+六 字符串类型
+ 
+create table stu(
+name char(8) not null default '',
+nickname varchar(10) not null default ''
+)charset utf8; 
+
+insert into stu
+(name,nickname)
+values
+('zhang','saner');
+
+
+1 存储范围不同 char 定长字符串 char(M)  0<=M<=255
+        M:代表宽度，表示可容纳的字符数
+  varchar 变长字符创 varchar(M) 0<=M<=65535(此处单位为字节)
+        M同上
+
+char 和 varchar的区别
+2 实际占的空间不同
+char定长型：M个字符，如果小于M个字符，实际占M个字符。
+carchar变长型：M个字符，存的小于M个字符，设为N，实占N个字符 在存储时，会利用1到2个字节
+               来记录到底存了多少字节。
+
+3 对末尾的处理不一样 
+对于char类型，存储时如果不够M个字符，内部会用空格补齐
+              取出来时会把尾部的空格去掉
+    varchar则因为有专门的记录所以不用
+    所以如果用char类型存数据时，如果尾部有空格，则取出时会丢失数据（也就是尾部的空格）
+
+4 速度上 定长快一些
+
+5 如何选择 char varchar
+  (1) 空间利用效率
+ （2）速度
+
+ 还有一种 text类型 文本串 约2w到6w个字符 这种类型无法索引
+ 如果不是特别大不用用，而且不能用默认值
+
+ 七 日期事件类型
+
+ create table history(
+ title varchar(10) not null default ''
+ );
+
+ 1 year类型:1个字节 表示 1901-2155 [错误时会变成0000]
+
+ 如果输入2位数 ‘00~69’表示2000年以后的
+               ‘70~99’表示1900年的
+
+2 data类型 ：典型格式 1992-08-12
+  日期类型：1000-01-01 到 9999-12-31
+
+create table d(
+title varchar(30),
+dt date
+)charset utf8;
+
+insert into d
+                   不写表示在所有列添加
+values
+('开国大典','1949-10-01');
+
+3 时间类型：-838:59:59~+838:59:59
+
+
+
+create table t(
+tn time
+);
+
+insert into t values('13:34:56');
+
+4 Datetime类型 典型格式 '1989-95-06 14:32:08'
+日期时间类型 范围: 1000-01-01 00:00:00 到 9999-12-31 23:59:59
+
+create table user(
+name varchar(20) not null default '',
+regtime datetime not null default '1000-01-01 00:00:00'
+)charset utf8;
+
+insert into user
+(name)
+values
+('张三');
+
+insert into user
+values
+('李四','2012-03-22 14:28:36');
+
+注意：
+在开发中，很少用日期时间类型来表示一个需要精确到秒的列。
+原因是，虽然日期时间类型能精确到秒，而且方便查看。
+用时间戳来表示更方便计算
+
+时间戳：是1970-01-01 00:00:00 到当前的秒数 用Int来存储
+
+
+七 其他
+enum 枚举类型
+
+create table t2(
+gender enum('男','女') 以后填入数据只能从枚举的中选
+)charset utf8;

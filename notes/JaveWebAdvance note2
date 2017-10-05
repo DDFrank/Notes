@@ -1,0 +1,1002 @@
+1 SOAP 简介
+	** SOAP源自于简单对象访问协议 Simple Object Access Protocl,是一种使用XML消息形式结构化数据在及其与及其之间进行交互的协议.
+	它有以下几个特点使其流行
+		-> 可拓展，因为它易于在基础协议中添加其他的特性，如安全
+		-> 中立，使用哪种传输机制都没有关系 HTTP JMS AMQP SMTP RCP
+		-> 独立的，SOAP不依赖于或者支持特定的编程模型
+
+	SOAP鼓励使用契约优先设计的开发概念
+	Web服务描述语言 WSDL Web Services Descriptive Language
+	技术定义了一种创建契约的方式，用户应该注意并且 Web服务也承诺遵守该契约。它在特定的位置定义了可用的Web服务地址，以及这些Web服务中使用的请求的响应的数据格式
+	通常会使用XSD(有时被引用为XML模式定义 XML Schema Definition) 编写契约。
+	一般在编写Web服务之前创建它，然后遵守其规则，相当于测试驱动开发，先写单元和应用测试，然后编写的代码应该能通过测试
+	** 一般会先用人类语言显式的定义契约，编写满足需求的Web服务代码，然后使用XML工具自动生成非常复杂的WSDL文档，这种方式比较简单
+
+	** SOAP不是一个简单的协议。每个SOAP消息消息由一个称为SOAP信封的根元素开头。所有关于消息的信息都被包含在该信封中。
+		信封有一个可选的SOAP头元素（跟HTTP头不同），用于包含特定于应用程序的信息(比如认证细节)
+		信息中还有一个必需的SOAP体元素，它包含了指令和请求或响应的数据。
+		最后，响应的信封里也可以有一个SOAP fault元素，描述处理请求时发生的错误。
+
+		所有的元素的细节主要由WSDL定义，编写和处理WSDL文档可能是非常复发和麻烦的任务，最好能自动化，但是XML又是非常消耗带宽和处理器的数据格式
+
+2 RESTful Web 简介
+	** 表述性状态转移是一个web服务概念，它在许多方面都类型于SOAP。REST架构由服务器和客户端组成。
+		客户端通过操作（向服务器发送请求获得或改变资源的状态）和服务器（处理请求并返回合适的资源）实现状态转移。资源可以是任意可以被客户端和服务器理解的逻辑概念
+		REST并不依赖或者指定资源类型或表示。资源可以是任意类型的数据。它们的表示形式可以是普通文本,html,xml,yaml,json和任何可以被客户端服务端理解的格式
+
+		REST系统使用URL，动词和媒体类型进行操作，其中URL表示资源，动词表示在资源上执行的操作，媒体类型（MIME类型）表示请求和响应中资源的表示
+
+		REST系统服务背后的主要原则是: 在资源上不需要执行太多重要操作。这些过程通常被引用为CRUD操作。
+		在HTTP规范中指定的方法可以轻松的映射到这些动词LPOST,GET,PUT和DELETE。
+		SOAP使用信封元素描述要执行的操作（执行的方法），而REST依赖于HTTP协议提供信封的内容。SOAP也将使用信封识别将要操作的资源。而REST依赖于HTTP URL
+
+		** 在RESTful Web服务中， Content-Type 请求头将通知服务器请求正文的表示，Accept头或者文件拓展名将请求一个特点的响应表示，ContentType头将通知客户端响应正文的表示
+
+3 SOAP 和 RESTful的比较
+	-> RESTful Web服务被绑定到HTTP上，SOAP是协议独立的
+		虽然不可能不使用HTTP就创建出RESTful Web服务，不过好像可以使用 URL,动词和媒体类型自己写一个REST洗衣，不过这很类似于HTTP
+
+	-> REST是独立的数据格式，SOAP要求用XML，在使用HTTP时，SOAP会产生冗余，因为它实际上是一个信封中的信封。信封元素重复提供了可以由URL和HTTP方法提供的功能（为了保持中立）
+
+	-> REST不需要用WSDL，它也可以契约先写，该契约是使用普通语言文档和免费可用的公共API而不是复杂的XSD定义的
+
+	-> 有些REST Web服务提供者会提供XML模式或者JSON模式文档，这可以帮助定义契约，因此 REST变成了主要的Web服务架构，软件框架对REST的采用和提供的支持抖超过了SOAP
+	对于SOAP，必须使用单独的Spring Web Services 项目
+
+4 发现机制 p465
+
+5 使用 URL HTTP方法和HTTP状态码
+	** 一些通用的状态码
+		-> 400 Band Request 表示客户端发出的请求时不支持或者无法识别的。通常是客户端没使用正确的语法。
+		比如，非空验证没通过，响应正文应以正确的格式描述出现错误的原因
+
+		-> 401 Unauthorized 表示在访问资源或者执行请求的状态转换之前，需要进行认证和授权。响应的内容根据采用的认证协议(比如OAuth)的不同而不同。
+
+		-> 403 Forbidden 表示客户端虽然通过了认证但是没有权限
+
+		-> 404 Not Found 客户端请求的目标资源不存在
+
+		-> 405 Method Not Allowed 不支持请求的状态转换（HTTP方法）
+
+		-> 406  Not Acceptable 服务器不支持Accept头中请求的表示格式。
+		比如客户端请求 accplication/xml ，但服务器只生产 application/json。不过，在这种情况下，服务器可能只会返回默认的支持格式而不是 406,这是大多数的做法
+
+		-> 415 Unsupported Media Type :类型于 406 表示请求中的 Content-Type 头（请求实体的表示）是一种服务器无法支持的类型。服务器可能也包含了一个Accept响应头。用于表示服务器支持哪些媒体类型。有可能Accept请求头和ContentType 请求头的支持都是不支持的媒体类型，这时，会优先返回 415,406是一个可选的响应
+
+		-> 500 Internal Server Error 表示在处理请求的过程中出现了错误。该响应应该尽可能的包含关于错误的信息
+
+	** HTTP方法
+		-> OPTIONS ： 少数可用的标注发现机制中的一种。当使用OPTIONS 方法发出请求访问资源的URL的时候，服务器必须返回一个包含了 Allow 头的 200 OK响应，
+		Allow头的内容应该是一个资源支持的HTTP方法的列表，以逗号分隔。
+		如果客户已经通过了认证，那么Allow 头反可能会包含客户端已经获得授权的HTTP方法（目标资源的）
+		服务器也可以范湖一个响应正文，用于描述如何使用资源的每个HTTP方法
+		如果支持的方法中包含了PATCH方法，那么响应也应该包含一个Allow-Patch头，它将指定一个PATCH请求支持的表示(媒体类型)的逗号分隔的列表，这可能与其他类型的请求有所不同
+
+		对于该方法:
+			-> 如果资源不存在，就返回404，而不返回 Allow 头的200
+			-> 如果未经过认证就不支持任何方法，那么服务器应该返回 401
+			-> 如果客户端通过了认证，但是没有权限调用资源上的任何操作，那么服务器应该返回 403
+
+		OPTIONS 请求被认为是安全的，所以在任何情况下，都不应该修改任何资源
+
+		PS: 如果JS程序开启了CORS支持，那么该 Web服务必须为所有资源支持OPTIONS请求，并且在响应OPTIONS时，必须包含 Access-Control-Allow-Methods 头，它的内容与Allow头一致
+
+		-> HEAD GET:
+			只要资源支持和运行GET，那么就必须同时支持和运行HEAD，区别在于HEAD响应不可以有响应正文。HEAD响应中包含的头必须与GET响应一致。GET请求被用于获得单个资源或多个资源
+			响应200 OK
+			这些方法也不应该对服务器的资源产生影响
+
+		-> POST：
+			POST请求用于在服务器上创建新的资源，一个POST请求应该总是针对集合URI（/services/Rest/account）
+			也可以针对子集合URI(/services/Rest/account/1075/order)。单个元素的URI（/services/Rest/account/1075） 应该得到 405的响应
+			成功的POST将创建被请求的资源并返回 201 Created响应。该响应包含一个Location头，其中指定了新创建的资源的URL。
+			响应正文应该是被创建的资源，之后使用GET请求访问Location 头中的URL时，会返回该响应正文。
+
+			POST是不安全的，非幂等的（创建相同的POST请求将导致多个资源的创建）。
+
+		-> PUT:
+			用于请求服务器中资源的替换，因此，常用于更新。PUT请求不应该用来访问集合API，相反，其用于访问单个元素URI和子元素URI，访问集合URI或者自己和URI的PUT将导致 405。
+			成功的PUT请求响应 204 NoContent,其正文应该是空的。
+			
+			PUT请求是不安全和幂等的。多个连续一致的PUT请求只会对第一个PUT请求中指定的资源产生影响。
+
+			PS：如果正在被更新的资源中包含了最后修改的时间戳或者版本号之类的话，为了遵守幂等的限制，只有在底层的实体真正发生变化时，服务才应该为PUT请求更新资源的时间戳或版本号。因此许多供应商都实现的部分幂等的PUT，意味着即使对于完全一致的PUT请求时，资源的时间戳和版本号也会被更新。
+
+		-> PATCH：
+			相对较新的HTTP方法，跟PUT比较像，PATHCH请求对资源的部分更新，而不是资源的完全替换。
+				这个方法的实现很有挑战性，为了支持PATCH，应用程序必须在请求实体中接收一个非常灵活的属性集，然后只更新请求中存在的这些资源属性。
+				因为可能要修改的操作正是要把某个资源设置为 null, 所以不能只检查属性是否为空
+
+				PATCH成功后的响应应该是 200 OK或者 204 NO Content
+				响应正文返回更新后的实体还是空的取决于个人
+
+				如果支持PATCH请求，也支持请求的媒体类型，PATCH请求的内容也得到了正确的解析，但是仍然因为某些原因不能应用该PATCH，那么应该返回 422 Unprocessable Entity
+
+				如果客户端使用 If-Match请求头或 If-Unmodified-Since 请求头定义了补丁的先决条件，并且该条件无法被满足，那么服务器会返回 412。如果多个请求同时尝试对一个资源进行修改(不允许的)，会返回 409 Confilct
+				PATCH是不安全和幂等的。
+
+		-> DELETE
+			用于删除一个资源，可以是针对单个元素或者集合的URI。通常删除多个资源的能力没有得到支持。删除成功的话，服务器应该返回 响应200 OK(在请求张文中包含被删除的资源)或者 204 No Content(响应正文为空)
+
+			如果服务器接受了DELETE命令，但不能立即执行（资源正在被使用）,那么它将返回一个 202 Accepted响应。此时，响应正文中应该包含一个资源URL，客户端可以使用它对请求进行跟踪。
+
+			DELTE是不安全的，软删除是幂等的，硬删除是不幂等的
+
+6 SpringMVC中配置RESTful Web 服务
+	** Rest的控制器最好和一般Web的应用上下文分开
+
+	** 使用原型注解分离控制器（也可以两种控制器放在不同的包里）
+		** @Controller有两个作用
+			-> 将该类纳入Spring管理的Bean
+			-> 负责让Spring1上下文在该类中搜索 @RequestMapping
+
+		** 可以使用元注解区分
+		// 实际上是一样的，但是语义不一样
+		// 这是正常的Controller
+		@Target({ElementType.TYPE})
+		@Retention(RetentionPolicy.RUNTIME)
+		@Documented
+		@Controller
+		public @Interface WebController{
+			String value() default "";
+		}
+		// 这是用于处理RESTful 请求的
+		@Target({ElementType.TYPE})
+		@Retention(RetentionPolicy.RUNTIME)
+		@Documented
+		@Controller
+		public @Interface RestEndPoint{
+			String value() default "";
+		}
+
+
+	** 创建单独的Web和REST的应用上下文
+
+	@Configuration
+	@EnableWebMvc
+	@ComponentScan(
+		basePackages = "com.frank",
+		useDefaultFilters = false,
+		includeFilters = @ComponentScan.Filter(
+		// 只扫描WEB的
+		WebContoller.class)
+	)
+	public class WebServletContextConfiguration extends WebMvcConfigurerAdapter{
+		....
+	}
+
+
+
+	@Configuration
+	@EnableWebMvc
+	@ComponentScan(
+		basePackages = "com.frank",
+		useDefaultFilters = false,
+		includeFilters = @ComponentScan.Filter(
+		// 只扫描REST的
+		RestEndpoint.class)
+	)
+	public class RestServletContextConfiguration extends WebMvcConfigurerAdapter{
+		....
+		/*
+			p471
+			REST的服务不需要视图解析或者多部件支持，也只需要解析JSON和XML的消息转换器
+			Spring 验证器，本地化支持等
+		*/
+
+		@Override
+		public void configureContentNegotation(ContentNegotiationConfigurer configurer) {
+			// 只支持使用Accept头用于内容协商(REST的标准方式)
+			configurer.favorPathExtension(false).favorParameter(false).ignoreAcceptHeader(false).defaultContentType(MediaType.APPLICATION.JSON)
+		}
+
+		@Bean
+		public LocaleResovler localeResovler() {
+			// REST的通用规则是没有会话，所以用这个
+			return new AcceptHeaderLocaleResovler();
+		}
+	}
+
+	以上这两个类都需要在启动类里面注册
+
+	....
+	// 注册web
+	AnnotationConfigWebApplicationContext webContext = new AnnotationConfigWebApplicationContext();
+	webContext.register(WebServletContextConfiguration.class)
+	ServletRegistration.Dynamic dispatcher = container.addServlet("springWebDispatcher", new DispatcherServlet(webContext));
+	dispatcher.setLoadOnStartup(1);
+	....// 添加多部件支持
+	dispatcher.addMapping("/");
+
+	AnnotationConfigWebApplicationContext restContext = new AnnotationConfigWebApplicationContext();
+
+	restContext.register(RestServletContextConfiguration.class)
+	DispatcherServlet servlet = new DispatcherServlet(restContext);
+	// 开启对Options请求的支持
+	servlet.setDispatchOPtionsRequest(true);
+	dispatcher = container.addServlet("springWebDispatcher", servlet);
+	dispatcher.setLoadOnStartup(2);
+	....
+	dispatcher.addMapping("/services/Rest/*");	
+
+6 处理RESTful Web服务中的错误条件
+	** 改变HTTP的状态码
+
+		// 抛出这个异常，就会响应 404
+		@ResponseStatus(HttpStatus.NOT_FOUND)
+		public class ResourceNotFoundException extends RuntimeException {
+			....
+		}
+		/* 这个给Web控制器用还可以，但是对于会出现错误页面的情况，不太适合于REST服务，如果异常处理类要处理所有异常的话，那么关于这个异常最好单独处理一下*/
+
+	** 声明异常处理器
+	// 使用该注解将一个方法标记为异常处理器,该注解的语义和@RequestMapping 几乎相同
+	
+	@ExceptionHandler({ ConstrainViolationException.class })
+	@ResponseStatus(HttpStatus.BAD_REQUEST)
+	@ResponseBody
+	public ErrorResponse handlerBeanValidationError(ConstraintViolationException e) {
+		....
+	}
+		这个方法的缺点是每个控制器都必须搞一个这样的方法
+
+	** 使用控制器增强模式
+		->标注了@ControllerAdvice(是@Component)的类由Spring管理，会对控制器进行增强。
+			在控制器增强类里面的方法添加@ExceptionHandler, @InitBinder, @ModelAttribute 的方法提供的增强将作用于所有控制器
+
+			@ControllerAdvice 类通常会在根应用上下文中自动实例化，然后一般是不需要所有的 Web控制器和终端控制器都需要这样的增强的，所以最好从跟上下文的组件扫描中排除该注解
+
+			excludeFilters = @ComponentScan.Filter({Controller.class, ControllerAdvice.class})
+			public class RootContextConfiguration {
+				....
+			}
+
+			PS: 在使用控制器增强注解前，要考虑到再将来的某个时间可能也需要为Web控制器创建增强。所以最好为RESTful 终端控制器创建自己的原型注解，而不是直接使用 @ControllerAdvice
+
+			..
+			@ControllerAdvice
+			public @Interface RestEndpointAdvice{
+				...
+			}
+
+		-> 为REST应用上下文配置组件扫描，能找到@RestEndPointAdvice类
+			includeFilters = @ComponentScan.Filter({RestEndpoint.class, RestEndpointAdvice.class})
+			public class RestServletContextConfiguration extends WebMvcConfigurerAdapter
+
+		-> 创建控制器增强进行错误处理
+			@RestEndpointAdvice
+			public class RestExceptionHandler{
+
+				// 异常处理方法
+				@ExceptionHandler(
+				// 捕捉验证失败的异常
+				/*
+					也可以添加多个异常，这该类就可以处理多个异常
+					如果匹配所有异常，Spring将调用与抛出的异常最匹配的方法，只会讲捕捉所有异常的方法当做最后的手段.
+					(也就是说，如果这样做，可能有的异常不会经过该类处理)
+				*/
+				ConstraintViolationException.class)
+				public ResponseEntity<ErrorResponse> handle(ConstraintViolationException e) {
+					ErrorResponse errors = new ErrorResponse();
+					for(ConstraintViolation violation : e.getConstraintViolation()) {
+
+						// 将所有的约束违反情况都转换为 Item,添加到ErrorResponse中，
+						ErrorItem error = new ErrorItem();
+						error.setCode(violation.getMessageTemplate());
+						error.setMessage(violation.getMessage());
+						errors.addError(error);
+					}
+					//最后将所有错误封装到该类中，并将状态码设置为 400
+					return new ResponseEntity<>(errors, HttpStatus.BAD_REQUEST);
+				}
+
+				public static class ErrorItem
+				{
+					private String code;
+					private String message;
+
+					// 如果该类以后要生成xml, 那么这就是属性
+					@XmlAttribute
+					public String getCode() {......}
+					public void setCode(String code) {....}
+					// 这个不知道啥意思大概会生成 simpleContent 或者 simpleType约束
+					@XmlValue
+					public String getMessage() {...}
+					public void setMessage(String message) {.......}
+				}
+
+				@XmlRootElement(name = "errors")
+				public static class ErrorRsponse
+				{
+					private List<ErrorItem> errors = new ArrayList<>();
+
+					@XmlElement(name="error")
+					public List<ErrorItem> getErrors() {....}
+					public void setErrors(List<ErrorItem> errors) {....}
+					public void addError(ErrorItem error) {....}
+				}
+			}
+
+7 将RESTful请求映射到控制器方法
+	** 在RESTful终端使用@RequestMapping 和普通的没啥差别
+
+	** 关于返回值，RESTful比较适合返回一个@ResponseBody 响应实体对象或者一个显式的 ResponseEntity<?> 或者void 和 ResponseEntity<void>
+
+	** 方法参数通常由@PathVariable 和 @RequestParam 参数组成
+
+	** 对于POST和PUT请求，需要使用@RequestBody 请求实体
+	** 应该避免返回任何类型的 Collection 或 Map,虽然能转为JSON，但是很难转为XML
+
+	// 用于请求集合请求
+	@RequestMapping(value = "account", method = RequestMethod.OPTIONS)
+	public ResponseEntity(Void) discover() {
+		HttpHeaders headers = new HttpHeaders();
+		// 设置ALLOW头
+		headers.add("Allow", "OPTIONS, HEAD, GET, POST");
+		return new ResponseEntity<>{null, headers, HttpStatus.NO_CONTENT};
+	}
+
+	// 用于请求单个资源请求
+	@RequestMapping(value = "account/{id}", method = RequestMethod.OPTIONS)
+	public ResponseEntity<Void> discover(@PathVariable{"id"} long id) {
+		// 验证身份
+		if(this.accountService.getAccount(id) == null) {
+			throw new ResourceNotFoundException
+		}
+		HttpHeaders headers = new HttpHeaders();
+		// 设置ALLOW头
+		headers.add("Allow", "OPTIONS, HEAD, GET, PUT, DELETE");
+		return new ResponseEntity<>{null, headers, HttpStatus.NO_CONTENT};
+
+
+	}
+
+	// 这个方法不好，返回的结果数量未加限制
+	@RequestMapping(value = "account", method = RequestMethod.GET)
+	@ResponseBody @ResponseStatus(HttpStatus.OK)
+	public AccountList read() {
+		AccountList list = new AccountList();
+		list.setValue(this.accountService.getAllAccounts());
+		return list;
+	}
+
+	@RequestMapping(value = "account/{id}", method = RequestMethod.GET)
+	@ResponseBody @ResponseStatus(HttpStatus.OK)
+	public AccountList read(@PathVariable{"id"} long id) {
+		Account account = this.accountService.getAccount(id);
+		if(account == null) {
+			// 抛出的异常会导致 404,忽略了类上的注解
+			throw new ResourceNotFoundException();
+		}
+
+		return account;
+	}
+
+	还有POST方法
+	除了业务逻辑跟上面差不多
+
+	// 这样创建URL，这样URL就会包含应用程序的域名和上下文路径
+	String url = ServletUriComponentsBuilder.fromCurrentServletMapping().path("/account/{id}").buildAndExpand(account.getId()).toString();
+	HttpHeaders headers = new HttpHeaders();
+	headers.add("Location", uri);
+
+	return new ResponseEntity......
+
+	PUT的逻辑差不多
+
+8 使用索引终端改进发现机制
+	** 通常创建一个索引终端，用于列出 Web服务中所有可用的资源	
+
+
+	P480
+
+9 测试Wen服务终端
+
+p482
+
+10 使用Spring Web Service 创建SOAP Web 服务
+	这里不可能详细讲 P484
+	** 因为是契约优先的，所以要先定义好XML文件
+
+	写好XML。利用IDE生成XSD 做一些调整
+
+	** Spring Web Services 不支持Jaa编程式配置
+		所以需要创建混合配置
+
+		@Configuration
+		@ConponentScan(
+				basePackages = "com.frank",
+				useDefaultFilters = false,
+				includeFilters = @ComponentScan.Filter(Endpoint.class)
+		)
+		@ImportResource("classpath: com.frank.config.soapServletContext.xml")
+		public class SoapServletContextConfiguration
+		{	
+			@Bean
+			// 显示的bean名称将覆盖默认的消息工厂，这样SOAP版本才是1.2
+			public WebServiceMessageFactory messageFactory() {
+				saajSoapMessageFactory factory = new SaajSoapMessageFactory();
+				factory.setSoapVersion(SoapVersion.SOAP_12);
+				return factory;	
+			}
+			
+		}
+
+	** soapServletContext.xml 文件告诉Spring Web Services基于注解配置终端，并使用之前创建的XSD模式文件生成WSDL
+		p488
+
+	** 修改跟配置，保证只有SOAP派发器Servlet上下文实例化并管理SOAP终端类
+		excludeFilters = @ComponentScan.Filter({Controller.class, ControllerAdvice.class, Endpoint.class})
+
+	** 启动 SOAP的dispatcher,让它使用SoapServletContextConfiguration进行初始化
+
+	AnnotationConfigWebApplicationContext soapContext = new AnnotationConfigWebApplicationContext();
+
+	soapContext.register(SoapServletContextConfiguration.class);
+	// 可以处理SOAP请求的MessageDispatcherServlet
+	MessageDispatcherServlet soapServlet = new MessageDispatcherServlet(soapContext);
+	// 指示其将WSDL位置转换为请求
+	soapServlet.setTransformWsdlLocations(true);
+	dispatcher = container.addServlet("springSoapDispatcher", soapServlet);
+	dispatcher.setLoadOnStartup(3);
+	dispatcher.addMapping("/services/Soap/*");
+
+	** 创建SOAP终端
+	P489
+
+
+11 消息传送简介
+	** 一个关键的企业级应用程序特性,可以单独使用，也可以结合群集能力
+
+	** 应用程序消息传送是信息的交换，通常是关于应用的不同单元之间的事件。尽管某些类型的人类交互通常会触发应用程序消息传送的交换，但它很少发生在应用程序用户的指令上。
+
+	** 应用程序消息传送是所有大型应用程序的一个关键组件。通过它，可以使某个应用程序的某个部分通知另一部分它所发生的活动，数据改变，缓存无效或任意数目的其它事件。
+
+	** 应用程序消息传送可以采取许多形式，但是最常用的是远程过程调用(RPC) 和 发布-订阅模式(pub/sub)
+
+12 RPC的概念和问题
+	-> RPC中，消息通过客户端-服务器范式交互。客户端连接到服务器（可能使用的是持久连接，或者可能每个过程调用一个连接）,并执行特定的过程（方法）。在Java，这通常被称为远程方法调用(RMI)。它是特定于Java的本地RPC协议，它使用接口和Java序列化。
+
+	-> 问题在于:调用者（客户端）必须知道消息接收者（服务器）的一些信息。RPC甚至不能应用在某些本地环境中（在运行的同一个应用程序中）。说实话，RPC容易引起紧密的耦合，所以不适合应用于应用程序消息传送
+		打比方，如果是RPC模式的话，更新了朋友圈的话，就必须向每个人发送请求告诉它们自己状态更新了。
+
+		发布订阅模式则不一样，你的朋友订阅你的朋友圈，当你的朋友圈更新的时候的时候朋友会自动收到该内容的通知，这就是松耦合的系统。
+
+		发布者不关系谁订阅了，并且不关系订阅者如何接收。
+		订阅者也不需要知道谁正在发布特定类型的内容
+
+13 订阅发布模式
+	** 一个 pub/sub 系统包含了3个角色:发布者，订阅者和代理。代理负责维护一个谁订阅了哪个主题的列表，并在发布者向相关的主题中广播消息时，将消息派发给合适的订阅者。
+	-> 一个订阅者也可能是发布者
+	-> 代理也可以是发布者和订阅者（不常见）
+	-> 不要超过一个代理，除非使用了负载共享或者故障恢复配置，采用一个以上的代理模拟一个逻辑代理（代理群集）
+
+14 使用 Spring Framework 的应用程序事件和监听器
+	** 不适用任何特殊的配置的时候，SpringFramework将自动为 pub/sub 环境中的消息进行代理。
+	
+	** 为了发布消息，调用一个 ApplicationEventPublisher 实例上的 publishEvent方法，并向它传递一个 ApplicationEvent 的实例即可。通过依赖注入或者实现 ApplicationEventPublisherAware，可以获得Spring管理的bean中的 ApplicationEventPublisher。得到该类的实例后，就可以随意发布任意数量的事件了。
+
+	** 为了订阅事件 事件 FooEvent 继承 ApplicationEvent, Spring bean 只需要实现 ApplicationListener<FootEvent> 即可以订阅 FooEvent 消息。为了订阅 BarEvent,实现 ApplicationListener<BarEvent> 即可
+
+	** 可以创建和订阅一个事件的层次（也就是可以订阅多个事件）
+
+	public class TopEvent extends ApplicationEvent {}
+	public class MiddleEvent extends TopEvent {}
+	public class CenterEvent extends TopEvent {}
+	public class BottomEvent extends MiddleEvent {}
+
+	那么
+	ApplicationListener<ApplicationEvent> 将会订阅所有的事件
+	ApplicationListener<TopEvent> 将会订阅 MiddleEvent  CenterEvent BottomEvent
+	ApplicationListener<MiddleEvent> 将会订阅 MiddleEvent 和 BottomEvent
+	ApplicationListener<CenterEvent> 将会订阅 CenterEvent
+	ApplicationListener<BottomEvent> 将会订阅 BottomEvent
+
+	** 因为Java不允许多次实现相同的接口，所以如果不订阅多个事件的共同祖先的话，就不能订阅多个不同事件，不过这很不方便。尤其是如果唯一的共同的祖先是ApplicationEvent的话,Spring提供了十几个內建事件，用于在任意给定的时间为不同的原因发布。
+	不过，使用 @Bean 和 匿名内部类可以解决这个问题。
+
+	@Service
+	public class FooService
+	{
+		public void doSomething() {}
+
+		@Bean
+		public ApplicationListener<BarEvent> fooService$barEventListener() {
+			return new ApplicationListener<BarEvent>() {
+				// 监听 BarEvent
+				@Override
+				public void onApplicationEvent(BarEvent e) {	
+				 	// 监听到了就让FooService 调用这个方法
+					FooService.this.doSomething();
+					// 通过这种方式可以订阅多个事件
+				}
+			}
+		}
+	}
+
+	不过这种方式时本地的，只能在指定的Spring 容器中工作，只能在单个JVM中工作。然而，许多情况下，都需要让 pub/sub 在群集中跨服务器工作
+
+15 群集的定义
+	** 应用程序群集是两个或多个为了相同的目标而一起工作的应用程序组，可以将它们看做单个系统。通常，群集将涉及两个或多个物理或虚拟服务器，这些服务器将运行相同的服务并执行相同的任务，甚至均匀地在服务期间共享负载。
+	它也可以涉及两个或多个一致的服务，它们将以相同的方式运行在相同的物理或虚拟机器上。
+
+	** 只要Java EE Web应用程序的 web.xml文件和 WEB-INF/lib目录中任意JAR文件的 /META-INF/web-fragment.xml的描述符中有 <distributable/> 标签，那么它就被认为是分布式应用程序
+	如果JAR文件中没有包含 web-fragment.xml 文件，那么它就不会被认为是一个Web片段。
+	如果应用程序的单个JAR中有 web-fragment.xml文件但缺少<distributable> 或者 web.xml中没有该标签的话，那么就是非分布式的。
+
+	** <distritable> 表示所编写的Web应用程序将被部署到同一主机或者不同主机上运行的多个JVM中。几乎在所有的情况下，这都意味着所有写入HttpSession 中的特性都是Serializable的。最好不要再分布式应用程序中支持非Serializable会话特性。
+	使用Serializatable最关键的是，允许在群集的服务器之间共享HttpSession。这是最重要的原因
+
+	** 使用群集是为了可拓展性和可用性，单个服务器无法为数量无限增长的用户服务。
+	大多数用户交互的应用程序都使用会话，所以最重要的是在群集中共享会话数据，这可以实现两个目的:
+		-> 如果一个服务器出现故障了，用户请求可以被发送到一个不同的服务器上，而该服务器拥有的会话数据与已经出现故障的服务器的数据完全相同。
+		-> 在理想情况下，连续的用户请求可以被接收到请求的服务器独立处理，所以用户的请求每一次都可以在不同的服务器上处理，而不会出现丢失会话信息的情况
+
+	** Java对象不能在单个Java虚拟机范围之外存在，HttpSession必须在发送到群集中其它服务器之前序列化它们，无论是通过共享内存，文件系统还是网络连接。这种模式提供了两个有挑战的问题的解决方案。
+		->	有些会话属性可能不是完全可 Serializable,（比较糟糕）比如持有一个数据库连接或者已打开文件的句柄，这样是无法序列化也无法在群集中共享的。
+			javax.servlet.http.HttpSessionActivationListener 接口指定了一个特殊类型的特性，它知道什么时候进行序列化并发送到群集中的其它服务器或者什么时候特性已经在某个服务器上反序列化了。
+			当发送会话特性到其它服务器（通过 sessionWillPassivate 方法）或者从另一个服务器接收到会话特性时（通过方法 sessionDidActivate）,任何实现了该接口的会话特性都将得到通知。
+			这样，会话特性可以重新打开一个 sessionDidActivate 中标记为 transient 的数据库连接。
+
+		-> 性能问题也是大问题，为了实现完整的服务器独立性，每次更新会话特性和请求时，服务器必须序列化并共享HttpSession（这样 lastAccessTime 属性才能保持为最近的时间）
+
+	** 会话粘滞的概念是一个重要的考虑因素。如何配置会话粘滞随着容器和负载均衡器的不同而不同，但概念是相同的：
+		在单个会话中，所有的会话请求都将在相同的JVM中处理。会话将周期性地序列化并在群集中共享，周期频率由开发团队设定的性能标准决定。
+
+16 配置容器以支持群集应用程序
+	** Java EE应用服务器和Servlet容器之间有很大不同，应用服务器可以实现很多自动配置，而Tomcat则配置比较复杂
+
+	** Tomcat必须配置群集中的所有Tomcat服务器让它们识别彼此，并协调如何执行会话迁移。然后必须告诉它们如何与彼此共享会话数据 - 通过 TCP套接字，数据库或者其它的方式。
+
+	** 还必须在 Tomcat群集节点之间创建负载均衡，可以实现下面的技术实现（通常）
+		-> 一个负载均衡器处理请求，并在多个 Apache HTTPD 或者 Microsoft IIS Web服务器之间调度请求，而这些服务器上运行着Aoache Tomcat Connector 的变体 - Apache 的 mod_jk 或者 IIS 的isapi_redirect。
+		Connector 知道它连接到的 Tomcat 服务器的性能指标可以将请求路由到负载最小的Tomcat服务器。
+
+		缺点是尚不支持 WebSocket 通信。
+
+		-> 不使用 Apache Tomcat Connector，直接用负载均衡器在Tomcat实例之间实现智能的负载均衡。不过这样就不能利用 Connector测试性能指标。
+		不过一个好的负载均衡器可以通过发布简单，周期性的健康检查请求，然后测量每个服务器响应响应请求花费的时间，再根据这些数据测量出精确的性能指标。
+
+	** 创建了节点并配置了负载均衡之后，我们必须配置 Tomcatq群集通信和会话迁移。最简单的方式是在 Tomcat 的 conf/server.xml 文件的 <Engine> 或 <Host>元素中添加下面的元素:
+		<Cluster className = "org.apache.catalina.ha.tcp.SimpleTcpCluster" />
+
+	具体的配置很复杂，留待以后。
+
+17 消息传送和群集的协作方式
+	** 分布式消息传送的用途
+		-> 大型应用程序通常都在数据库中存储了控制应用程序行为的设置，因为设置的量很大，如果每次都请求就会引起性能问题。定期缓存刷新的话可能因为缓存过期导致不正确的行为。
+		采用分布式消息传送之后，在一个服务器更新状态后，，可以发送消息到其它服务器，指示它们清空设置缓存。
+		此外，还可以将特殊的消息裁剪成设置组，这样只需要重新加载缓存设置的一小部分即可（即发送设置信息到服务器中）。这种方式也可以应用在其它缓存类型中。
+
+		-> 不同的服务可能运行在群集中的不同服务器上。这时期望订阅特定主题的服务必须从群集中而不是本地接收消息。
+
+		-> 某些任何不能在单个HTTP请求的范围内启动和完成。可以按照计划或者针对请求启动这些任务。通常这些任务必须在后台完成。这时，通常来说必须提供一种方式来检查后台任务的状态。分布式消息传送可以使应用程序群集中的所有服务器都知道任务的状态。这样任意的服务器发送一个状态检查请求都可以得到一个有用的响应。
+
+	** 分布式消息传送的问题
+		**群集中消息传送是异步的。一般该模式会发布消息后继续执行，中间并没有回复的过程，如果需要回复，那不如使用RPC。
+		在群集中，异步的问题很严重，多个程序收到消息和响应额时间可能完全不同，应该为这种延迟考虑对策，不能编写一个依赖于快速发送和处理消息的应用程序。
+
+		** 传输能力
+			事实上在相同程序中发送的消息是可以保证送到订阅者手上的，Spring 的 ApplicationEventPublisher 的 publishEvent 方法只有在所有订阅者都收到消息时才会返回，所以该方法之后的代码可以保证订阅者已经收到了消息。
+			但是群集中的消息发布存在延迟，所以在大多数情况下，应该保证是在单独一个线程中完成。向目标群集发布了消息之后，无法保证任何一个订阅者可以收到。
+			一般来说，在使用群集消息传送时，应该注意程序的健壮性，即使消息发送失败了，也不应该对程序有太大影响。
+
+	** WebSocket 可以极大的简化群集中应用程序之间的通信。
+	WebSocket 信道可以用作发布应用程序消息的信道，在该信道中主要有两种方式使用 WebScoket:
+		-> 应用程序可以为群集中所有其他的应用程序打开一个WebWSocket 连接，并通过该连接发送消息。目标代码(Spring Framework) 将作为消息代理将消息发送到合适的订阅者。这种方式依赖于某种发现机制 - 通常是使用子网多播数据包。
+			当应用程序启动完成之后，它将发送一个数据包到多播地址上，所有监听该数据包的应用程序都将收到它。
+			群集中的其它应用程序将使用数据包中的信息打开一个到发送该数据包应用程序的连接。通过这种方式，应用程序只需要重新广播多播数据包，就可以自动地从故障中恢复。
+
+		-> 可以使用 WebSocket 与消息代理进行通信。
+			WebSocket 应用通讯协议(WAMP跟PHP那个没关系) 中指定了这样的模式，在网址 http://wamp.ws/spec 中可以了解到相关的消息。
+			在 WAMP中，消息代理将驻留在不同的服务中（或者不同的服务器中）。
+			逻辑代理可能是负载均衡器之后的一个代理服务器群集。应用程序将打开一个到代理的持久 WebSocket 连接，并通过该连接发送订阅请求和消息，接收消息。
+			此时，SPring Framework 不是主要的代理。
+			结合使用SpringFramework，我们可以通过许多方式实现逻辑代理。
+			例如，可以使用代理广播所有的ApplicationEvent的消息，并使用Spring 的 pub/sub支持将消息发送到正确的订阅者。
+			或者可以只将 Spring 的 pub/sub 支持用于本地消息。并使用WAMP 处理群集消息，使其互相独立
+			也可以只用WAMP，不使用 Spring Framework的pub/sub支持
+			完全取决于个人偏好和需求
+
+	** Java Message Service2.0(JSR 343)
+		** JMS同时支持几种不同的消息传送模式，但它对使用了主体，发布者和订阅者概念的 pub/sub模式提供了一流支持。另外，JMS将被用作消息代理。
+		使用JMS的一个优点是它具有在队列中添加消息的能力（可选）。消息将一直存在直到一个感兴趣的消费者处理该消息。在处理时，该消息将从队列中移除,然后该消息将不能再被处理。这个过程是事务的，只能有一个消费者成功处理它，并且只有在一个消费者处理它之后，它才能被标记为已处理。
+
+		** JMS是一个API，可以很容易切换JMS提供者。不过事实上，不同的实现之间可能无法交互和共享消息。所以，在不同提供者或不同平台编写的应用程序之间通信时，JMS通常不是最好的选择。
+
+		** JMS可以与Spring Framework集成，方式和WAMP一样。Spring的支持也很好，不过JMS在JavaEE应用服务器之外是很难使用的。
+
+	** 高级消息队列协议
+		AMQP（Advanced Message Queuing Protocol） 标准的形成是为了解决JMS和JMS规范之间交互问题
+		JMS指定了一个Java API，但AMQP指定了一个传输消息的有线协议，使用该协议时，提供者可以指定依赖个人语言的API。
+		AMOP也支持 pub/sub，事务消息队列和点对点(定向)消息。可以和Spring集成。不过Spring尚未支持。有一个Spring AMQP项目提供了支持。
+
+18 为应用程序添加消息传送支持
+	以用户登录或退出应用程序时通知订阅者为；例子
+
+	-> 创建应用程序事件
+
+		判断各个事件的层级关系，确定哪个事件继承哪个事件，方法的参数是事件所使用的资源。比如人力资源系统中各个事件里标识员工的员工号，认证事件里可能包含的身份，主体，角色等
+
+		public abstract class AuthenticationEvent extends ApplicationEvent{
+			public AuthenticationEvent(Object source) {
+				super(source);
+			}
+		}
+
+		LoginEvent 和 LogoutEvent 继承它就好，方法参数改为String 的 用户名作为资源
+		}
+
+	-> 订阅应用程序事件
+
+		@Service
+		public class AuthenticationInterestedParty implements ApplicationListener<AuthenticationEvent>{
+			private static final Logger log = LogManager.getLogger();
+
+			// 于是事件发布后该Service会调用该方法
+			@Override
+			public void onApplicationEvent(AuthenticationEvent event) {
+				log.info("Authentication event for IP address{}.", event.getSource());
+			}
+		}
+
+		如果只想订阅登录或退出事件，那么只订阅相应的事件就好了
+
+		发布方法执行的过程中，消息的传送是同步执行的，所以一个耗费时间很长的操作将降低发送消息到其它订阅者的速度，并延迟控制权的访问（返回到最初发布消息的方法）。如果有一个消息处理操作可能需要很长时间才能完成，那么应该在单独的线程以异步的方式执行它。这时候就需要 @Async 标注方法了
+		
+			
+	-> 发布应用程序事件
+		最简单的方式时创建一个WebController 控制器，通过其交替发布 LoginEvent LogoutEvent
+
+		@WebController
+		public class HomeController{
+			// 注入事件发布器
+			@Inject ApplicationEventPublisher publisher;
+
+			@RequestMapping("")
+			public String login(HttpServletRequest request) {
+				// 登录的时候发布事件
+				this.publisher.publishEvent(new LoginEvent(request.getRemoteAddr()));
+				return "login";
+				// 如果不是这个模式，就必须要注入别的类，自己调用其方法来处理，这样就紧耦合了
+			}
+
+			// 还有个登出的方法，差不多
+		}
+
+19 在群集中分别消息传送
+	-> 选择一种希望使用的协议用于消息的发送。
+	-> 接下来，必须创建一个自定义事件多播器，使用选择的协议正确的地发布事件。
+	-> 在Spring Framework 中，多播器是一个负责接收所有发布的事件，并将它们发送到合适的订阅者的 bean
+
+	接下里的例子实现一个 WebSocket 多播器，采用直接通信而不是WAMP代理。因此，节点之间的连接将组成一个完全无向简单图 -> 在一个有n个节点的群集中，每个节点的度数为 n-1 （意味着有 n -1 个WebSocket 连接，因为它连接到了群集中的所有其它节点）
+
+	** 更新事件以支持发布
+		** EventObject(ApplicationEvent 继承的类)将它的源定义为临时的。这意味着事件在序列化时会将源字段排除。
+		为了解决这个问题，必须保证源氏可序列化的，然后对该事件添加一些支持，从而保证接收到它的节点可以正确地反序列化出非临时值。源如果为null，会抛出空指针异常
+
+		还需要添加一些方式阻止事件被重复地播放。因为多播器从其它节点收到事件之后会重写对事件进行多播，所以它必须指定是否需要将这些事件重写多播给其它节点。否则，事件会无线循环。
+
+		public class ClusterEvent extends ApplicationEvent
+			// 实现该接口，该类就可以被序列化了
+		 implements Serializable{
+
+			private final Serializable serializableSource;
+			// 用来标志已经通过群集分布的事件
+			private boolean reboardcasted;
+
+			// 实例化的时候先把源字段保存好
+			public ClusterEvent(Serializable source) {
+				super(source)
+				this.serializableSource = source;
+			}
+
+			final boolean isRebroadcasted(){
+				return this.rebroadcasted;
+			}
+
+			final void setRebroadcasted(){
+				this.rebroadcasted = true;
+			}
+
+			// 保证使用的源总是 Serializabke的
+			@Override
+			public Serializable getSource(){
+				return this.serializableSource;
+			}
+
+			// 用于在反序列化之后将非临时源字段复制到原始的源字段上。
+			private void readObject(ObjectInputStream in)
+				throws IOException, ClassNotFoundException {
+					in.defaultReadObject();
+					// 父类的源字段，会丢失，所以要把之前的值给它
+					this.source = this.serializableSource;
+			}
+		}
+
+	** 创建并配置一个自定义事件多播器
+		** 标准的事件多播器 SimpleApplicationEventMulticaster 未对消息群集提供任何内置的支持,所以要自己实现
+		-> 继承 SimpleApplicationEventMulticaster
+		-> 重写 multicastEvent ，先执行父类的行为，然后判断事件的类型，如果是 ClusterEvent,就将事件发布到群集中。
+
+		-> 方法 publishClusteredEvent 将把事件发送到多播器中注册的所有终端。
+
+		public ClusterEventMultiCaster extends SimpleApplicationEventMulticaster {
+			private final Set<ClusterMessagingEndpoint> endpoints = new HashSet<>();
+			@Inject ApplicationContent content;
+
+			@Ovrride
+			public final void multicastEvent(ApplicationEvent event) {
+				try {
+					// 执行父类的行为
+					super.multicastEvent(event);
+				} finally {
+					try{
+						// 如果该事件是要向集群发布并且还没发布过的话，就发布
+						if(event instanceof ClusterEvent && !((ClustterEvent)event).isRebroadcasted) {
+							this.publishClusteredEvent((ClusterEvent)event);
+						}
+					}catch(Exception e) {
+							syso("Failed to boradcast");
+					}
+				}
+			}
+
+			// 发布事件
+			protected void publishClusteredEvent(ClusterEvent event) {
+				synchronized(this.endpoints) {
+					// 该类参照后面
+					for(ClusterMessagingEndpoint endpoint ： this.endpoints) {
+						endpoint.send(event)
+					}
+				}
+			}
+
+			// 终端的注册，打开连接时添加
+			protected void registerEndpoint(ClusterMessagingEndpoint endpoint) {
+				if(!this.endpoints.contains(endpoint)) {
+					synchronized(this.endpoints) {
+						this.endpoints.add(endpoint);
+					}
+				}
+			}
+
+			// 关闭连接时移除
+			protected void deregisterEndpoint(ClusterMessagingEndpoint endpoint) {
+				synchronized(this.endpoints) {
+					this.endpoints.remove(endpoint);
+				}
+			}
+
+			// 通过 WebSocket 连接到另一个节点
+			protected void registerNode(String endpoint) {
+				syso("Connecting to cluster node{}.", endpoint);
+				WebSocketContainer container = ContainerProvider.getWebSocketContainer();
+				try{
+					ClusterMessagingEndpoint bean = this.context.getAutowireCapableBeanFactory().createBean(ClusterMessagingEbdpoint.class);
+					container.connectToServer(bean, new URI(endpoint));
+					syso("Connected to cluster node{}.", endpoint);
+				}catch(DeploymentException | IOException | URISyntaxException e) {
+					syso("Failed to connect")
+				}
+			}
+
+			// 广播事件
+			protected final void handleReceivedClusteredEvent(ClusterEvent event) {
+				event.setRebroadcasted();
+				this.multicastEvent(event);
+			}
+
+			// 销毁之前关闭连接
+			@PreDestory
+			public void shutdown() {
+				synchronized(this.endpoints) {
+					for(ClusterMessagingEndpoint endpoint : this.endpoints) {
+						endpoint.close();
+					}
+				}
+			}
+		}
+
+		 在跟上下文下面配置该bean即可
+
+		 @Bean
+		 public ClusterEventMulticaster applicationEventMulticaster(){
+		 	return new ClusterEventMulticaster();
+		 }
+
+		 ** 使用WebSocket 发送和接收事件
+		 p 512
+		 该终端会被同时标注 @SeverEndpoint 和 @ClientEndpoint，同时用作客户端和服务端
+		 通过这种方式，每个节点都与所有其它节点保持了一个连接，并且消息可以通过连接同时在两个方向上发送。
+		 打开连接时，终端将在多播器上注册资金，关闭连接时则撤销注册。
+		 当它收到一个事件消息时，它将发送事件到多播器，然后多播器将调用它的send方法把事件发送到群集
+
+		 ** 通过多播数据包发现节点
+		 	上面的相互协作的多播器和 WebSocket
+		 	终端将协调事件的播放和多播。不过，在不知道其它节点位置的情况下，它们都不能初始化与其它节点的通信。
+		 	有两种方法解决这个问题
+		 		-> 配置，每个应用程序节点中添加属性或XML文件，向节点通过指令指示它们如何连接到其它节点。
+
+		 		-> 发现，新建 ClusterManager类，该类首先打开一个多播地址来监听来自于其它节点的数据包。在根应用上下文启动之后，
+		 		它开始周期性地检查应用程序的URL是否是公开可访问的。因为如果根应用还没启动完成就发送多播数据包，那么其它节点会在尝试连接它的时候失败。
+		 		当它可以访问应用程序的URL时，它将发送发现数据包到多播组，宣布自己加入了群集。
+		 		正在运行的节点将接收到该数据包，并连接到数据包中的 WebSocket URL。通过这种方式，每个节点都将只连接到所有其它节点一次。
+
+		 		p514
+
+		 ** 部署多个应用程序模拟群集
+		 	在群集中，通常将单个应用程序部署到两个或多个不同的Servlet容器中，并使用完全相同的上下文路径.这样，应用程序之间就无法共享Session数据了。
+
+		 	P516
+
+20 使用 AMQP分布事件
+	使用 WebSocket 连接的缺点在于拓展性不强，当群集增大时，节点数会以几何数目增长。
+	而其他的消息传送协议则更有拓展性。因为群集流中的所有消息都被发送到一个中央代理。最终，该配置将形成一个简单连通图，除了代理（它有n-1个连接），其他节点都只有一个连接
+
+	** 配置AMQP代理
+		最流行和最强大的实现是RabbitMQ,免费开源，必要时提供了付费的企业支持。
+		-> 因为RabbitMQ用Erlang编写，所以要先下载Erlang
+		p519
+
+	** 创建AMQP多播器
+
+21 数据持久化的定义
+	持久化就是使某种形式的数据可以在多次运行应用程序时一直存在。将某些实体保存到某些存储媒介中。
+
+	-> 平面文件实体存储
+		使用操作系统提供的本地文件系统，比如 xml json或者Java序列化（无拓展性），这种情况难以管理
+
+	-> 结构化文件存储
+		也是使用操作系统的文件系统，然后每个实体使用一个文件,方便搜索
+
+	-> 关系数据库系统
+
+	-> 面向对象数据库 OODBMS
+		该种数据库所使用的的表示数据模型将于面向对象编程语言所采用的一致。
+		不流行
+
+	-> 无模式数据库系统
+		NoSql 大多数都是面向文档数据库。
+		文档数据库缺少严格的结构，但它使用一种一致和流行的格式进行编码。比如XML或JSON(或者紧凑的JSON BSON)。文档基本上是关系数据库记录的同义词，集合基本上是表的同义词。
+		文档数据库索引查询的时候不如关系型数据库，但是可以在不牺牲插入性能的前提下存储大量数据。
+		所以文档型数据库是存储日志和认证相关数据的理想数据库
+		NoSql 还有一种流行类型就是键-值存储。是一种很扁平的存储方式
+		还有图表数据库，不用外键也可以让表产生关系，最流行的是 Neo4j,很适合java
+
+		每个NoSql数据库的使用方式都不同，都有自己的客户端，大多数都接收Java
+
+22 了解Hibernate 会话API
+	Hibernate ORM 中执行操作的主要工作单元是 org.hibernate.Session 接口。该类和HttpSession或 WebSocket会话不同， Session代表了一个事务从开始到结束的整个生命周期。可能是一个请求中多个事务中的一个，在整个请求中一致持续的事务或者跨多个请求的事务。会话不是线程安全的，并且必须在一个线程中使用，它将负责管理实体的状态。
+		从数据库中获取实体时，该实体将会被附着到会话上，并一直作为会话的一部分，直到会话（和它的事务）结束。通过这种方式，实体的特定属性可以通过懒加载的方式加载。只要在会话的生命周期内访问即可。
+		同样地，添加或更新一个实体时，这些修改也被附着到会话上，当从数据中删除实体时，它也将从会话中删除。类似于 JPA 的EntityManager
+
+		-> 按照实体的代理键查找代理(利用主键查找)
+		return (Product)session.get(Product.class, id);
+		不存在返回null
+
+		-> 添加新实体
+			// save会产生额外的事务来完成
+			session.save(product);
+			返回被添加到实体中的ID
+			// 如果事务已经关闭，那就不执行 insert语句
+			// 于是 persist无法保证insert执行，只有刷新的时候才执行
+			// 因此不会返回自动生成的ID，即使完成了，ID也可能还没被设置，需要刷新会话才有
+			session.persist(product)
+			session.flush();
+
+		-> 刷新会话会使挂起的语句立即执行，它不会结束事务
+		关闭会提交事务会自动刷新一次。
+		因为Hibernate将会把语句添加到队列，如果一个事务中有多个操作，可能无法按照编程语句的顺序去执行。
+		刷新时，执行的操作顺序如下:
+			-> 所有的实体 insert操作
+			-> 所有实体的 update
+			-> 所有集合的 delete
+			-> 所有集合元素的 insert,updae delete
+			-> 所有集合的 insert
+			-> 所有实体的 delete
+
+		-> 更新实体
+			// 只有在实体尚未附着到会话之前（没有使用过 get, save或 persist），才能正常运行。否则，将会抛出异常
+			session.update(product)
+
+			// 这种则没有问题
+			session.merge(product)
+
+		-> 删除实体
+			// 就这样
+			session.delete(product)
+
+		-> 驱逐实体
+			// 将实体从会话中分离，不过不会导致数据库的变动
+			session.evict(product)
+
+			驱逐所有实体的话
+			session.clear();
+
+			驱逐实体会取消实体所有挂起的修改（包括插入删除）
+
+		-> 使用 Criteria API 和 Query API 来执行多样的查询
+			p538
+
+23 从SessionFactory 中获得会话
+	** 会话不会凭空出现。会话将被关联到一个JDBC数据库连接，因此使用会话前，必须创建连接或者从数据源中获得一个连接，实例化会话实现，并将会话附着到连接上。
+
+	如果当前上下文有一个在执行的会话，那么就会查询现有会话，而不是每次执行操作都创建一个新的会话。
+	SessionFactory 的接口中有构建会话，打开会话和获取当前会话的方法
+
+	-> 打开一个新会话
+		// 使用默认的配置（数据源，拦截器等）打开一个会话。
+		Session session = sessionFactory.openSession();
+
+		// 想覆盖这些配置的话(需要使用不同数据库的连接)
+		Session session = sessionFactory.withOptions().connection(connection).openSession();
+
+		// 想拦截SQL并进行某些修改的时候
+		Session session = sessionFactory.withOptions()
+						.interceptor(new EmptyInterceptor() {
+							@Override
+							public String onPrepareStatement(String sql){
+								// 将设定好的字符串替换掉
+								return sql.replace("@SCHEMA@", schema)
+							}
+						}).openSession();
+
+	-> 无状态的会话
+		org.hibernate.StatelessSession 。无状态的会话非常适合用于批量数据操作，它可以完成很多跟 Session一样的工作，但是不会像Session一样保持附着的实体
+		// 打开一个无状态的会话
+		sessionFactory.openStatelessSession
+		// 打开一个自定义配置的无状态会话
+		SessionFactory.withStatelessOptions()
+
+	-> SessionFactory 是线程安全的，它最重要的能力是保存和获取“当前”Session的能力（无状态的会话因为没有状态所以不行）。
+		当前Session不是指的最后一个使用openSession打开的Session。而是指由使用的 CurrentSessionContext 实现所定义的。
+		最常见的实现是 ThreadLocalSessionContext,他在ThreadLocal 中存储了当前的会话。所有对 getCurrentSession 的调用都将获得之前在当前线程中打开的对话，只要存在
+
+		Session session = sessionFactory.openSession();
+		.....
+		Session session = sessionFactory.getCurrentSession();
+
+24 使用 Spring Framework 创建 SessionFactory
+	Spring 会帮助创建 SessionFactory,并且管理会话和事务
+
+	** 使用XML配置时，定义一个 LocalSessionFactoryBean 的bean就好，这个bean会返回一个SessionFactory, 该类还实现了 PersistenceExceptionTranslator, 所以它还可以被用作转换器，将Hibernate ORM异常转换为 Spring Framework 的持久化异常
+
+	** Java 配置时，使用 LocalSessionFactoryBuilder
+
+		@EnableTransactionManagement
+		public class RootContextConfiguration implements AsyncConfigurer, SchedulingConfigurer
+		{
+			...
+			@Bean
+			public PersistenceExceptionTranslator persistenceExceptionTranslator() {
+				return nw HIbernateExceptionTranslator();
+			}
+
+			@Bean
+			public HibernateTransactionManager transactionmanager() {
+				HIbernateTransactionManager manager = new HibernateTransactionManager();
+				manager.setSessionFactory(this.sessionFactory());
+				return manager;
+			}
+
+			@Bean
+			public SessionFactory sessionFactory() {
+				LocalSessionFactoryBuilder builder = new LocalSessionFactoryBuilder(this.dataSource());
+				builder.scanPackages("com.frank.entities");
+				builder.setProperty("hibernate.default_schema", "dbo");
+				builder.setProperty("hibernate.dialect", MySQL5innoDBialect.class.getCanonicalName());
+
+				return builder.buildSessionFactory();
+			}
+
+			....
+
+		}
+
+		通过以上配置，Spring 可以在调用 Transactional 服务或者仓库方法之前自动创建会话，并在方法返回后自动关闭会话。如果一个事务方法调用了另一个，当前会话将一直保持有效。
+		只要注入 SessionFactory,并在需要使用会话的时候调用 getCurrentSession 即可
+		
+
+
+	

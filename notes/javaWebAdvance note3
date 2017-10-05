@@ -1,0 +1,2162 @@
+1 在Tomcat 中创建链接资源
+	在Tomcat 的 conf\context.xml中创建一个连接资源
+
+	// name属性可以根据每个数据源不同而替换，不过都应该以jdbc开拓
+	<Resource name="jdbc/DataSourceName" type="javax.sql.DataSource"
+	maxActive="20" maxIdle="5" maxWait="10000"
+	username="mysqluser" password="mysqlpassword"
+	driverClassName="com.mysql.jdbc.Driver"
+	ur="jdbc:mysql://localhost:3306/databaseName" />
+
+	该元素将把连接池 DataSource 暴露为JNDI资源，这样任何应用程序都可以通过JNDI查询到该资源
+
+2 注解映射实体
+	** @Entiy 用于标注实体
+		-> name属性: 自定义实体名称
+
+	** @Table 实体映射到的表名默认为实体名。如果Entity有name属性，那么表名默认为该名字
+		-> name ； 自定义表名
+		-> schema: 覆盖数据库连接的用户的默认模式（数据库要支持）
+		-> catalog ： 存在 catalog 属性所指的目录中，而不是数据库连接中选择的目录（目录在这是数据库的意思）
+
+		-> uniqueConstraints : 用于模式生成(建议不要使用)
+
+		@Table(name = "Books", uniqueConstraints = {
+			@UniqueConstraint(name = "Books_ISBN", columnNames= {"isbn"})
+		})
+
+		 JPA2.1 的版本，也可以使用 indexes特性指定在使用模式生成时JPA应该创建的索引
+
+		 如果禁用了模式生成那么以后的就不能设置了。
+
+	** 指示 JPA 使用实体字段的方式。
+		** 默认情况下，JPA提供者将访问实体字段的值，并使用JavaBean 属性的 getter 和 setter 将这些字段映射到数据库列。
+		因此，private 字段的名称和类型与 JPA没有关系。JPA将只会查看JavaBean 属性访问方法的名称和放回类型
+		可以使用 javax.persistence.Access 注解改变这个行为，以显式的方式指定JPA提供者应该采用的访问方法。
+			-> AccessType.PROPERTY(默认)
+				使用getter setter
+			-> AccessType.FIELD
+				使用实例字段获取和设置字段值，基本不会用这个
+		@Entity
+		@Access(AccessType.FIELD)
+		public class SomeEntity implements Serializable{
+			.....
+		}
+
+		** 如果是AccessType.PROPERTY ,那么注解标注在私有字段而不是JavaBean访问方法上，那么字段名必须匹配javaBean名。
+		如果标注在JavaBean 访问方法上，就不需要保证名称匹配
+		AccessType.FIELD的时候相反。
+		所以最好保持一致
+
+		两者混用的会很有可能会导致错误。
+
+		** 映射代立键
+			** 创建简单ID：
+				首先，可以使用 @javax.persistence.Id 标注任意的JavaBean属性。该注解可以使用在私有字段上或者公开访问方法上，它表示该属性是实体的代理键。该属性可以是任意的Java 原生类型，原生类型封装器，字符串， java.util.Date,java.sql.Date,java.math.BigInteger 或 java.math.BigDecimal。(Java8 的日期时间类型支持还不广泛)
+
+				如果没有Id主键，JPA将查询名称为id的属性，并自动使用它，适用规则同上。
+
+				通常会要求希望Id能自动生成而不是手动添加
+				使用GeneratedValue 注解完成该任务，通过@GeneratedValue 可以指定生成策略，如果必要的话还可以指定生成器名称
+
+				@Id
+				// 自动生成主键的策略,常见的关系型数据库都支持
+				// 即支持插入前触发器的数据库
+				@GeneratedValue(strategy = Generation.IDENTITY)
+				public long getId() {
+					return this.id;
+				}
+
+				/*
+					结合使用 @GeneratedValue 和 @javax.persistence.SequenceGenerator，可以告诉JPA提供者使用序列生成值
+				*/
+
+				@Id
+				@GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "SomeEntityGenerator")
+				// 上面的哪个 generator 对应着下面这个注解的 name属性
+				@SequenceGenerator(name = "SomeEntityGenerator", sequenceName = "someEntitySequence")
+				public long getId() {
+					return this.id;
+				}
+
+				// 生成器的名称时全局的，所以可以在一个实体上创建单个@SequenceGenerator, 并且在多个试题中多次使用，当然，也可以每个实体使用单独的序列。
+
+				可以使用@SequenceGenerator(<sequence-generator>)可以通过 schema 和 catalog 特性指定序列所属的模式和数据库。如果启用了JPA模式生成，那么也可以使用 intialValue(intiail-value) 和 allocationSize(allocation-seize) 表示序列的初始值和每次执行插入操作时的值。默认Wie 0 和 50(这是一种构造器的方法)
+
+				也可以使用 TableGenerator 讲一个单独的表用作数据库序列。它也有 name,schema,catalog,intialValue,allocationSize。使用目标和默认值也相同，不同的属性如下(没有默认值):
+					-> table : 表示生成器数据库表的名称
+					-> pkColumnName: 表示生成器表的主键列的名称。
+					-> pkColumnValue 表示该生成器主键列的值。
+					-> valueColumnName 表示该值列的名称
+
+					在插入一条记录之前，提供者将为指定的 pkColumnValue从序列表中选择一个值，并增大该记录的值当做主键
+
+					@TableGenerator(name = "PublisherGenerator", table = "SurrogateKeys", pkColumnName = "TableName", pkColumnValue = "Publishers",
+					valueColumnname = "KeyValue", initialValue = 11932, allocationSize = 1)
+					/*
+						这个生成器的名字叫  PublisherGenerator
+						它在数据库对应的表叫做 SurrogateKeys
+						每次要生成的主键的时候，会去 SurrogateKeys 表里面里面寻找 TableName 这一列里面 值为 Publishers的这一行，然后取得KeyValue 列的值，如果没有，那就是 11932,如果有，那么当前数据的主键就是 keyValue + 1
+
+					*/
+
+			** 创建组合ID
+				组合ID由多个字段和列组成，与映射标注的代理键相比，它更具有挑战性。可以采用两种方式生成
+
+				** 结合使用多个@Id属性和 @javax.persistence.IdClass @IdClass 注解中指定了另一个类，该类包含的属性必须与实体类中所有的@Id属性相匹配
+
+				public class JoinTableCompositeId implements Serializable{
+					private long fooParentTableSk;
+					private long barParentTableSk;
+					...
+				}
+
+				@Entity
+				@Table(name = "SomeJoinTable")
+				@IdClas(JoinTableCompositeId.class)
+				public class JoinTableEntity implements Serializable{
+
+					private long fooParentTableSk;
+					private long barParentTableSk;
+					...
+
+					@Id
+					public long getFooParentTableSk() {.......}
+					set...
+
+					@Id
+					public long getBarParentTableSk() {.....}
+				}
+
+				-> 根据Id查询实体
+					JoinTableEntity entity = entityManager.find(JoinTableEntity.class, id);
+					这种写法有一点笨拙，因为得新建Id类
+
+				** 利用 @javax.persistence.EmbeddedId 和 @javax.persistence.Embedded 将组合Id类为内嵌Id属性
+
+				@Embeddable
+				public class JoinTableCompositeId implements Serializable {
+					private long fooParentTableSk;
+					private long barParentTableSk;
+					...
+				}
+
+				@Entity
+				@Table(name = "SomeJoinTable")
+				public class JoinTableEntity implements Serializable {
+					private JoinTableCompositedId id;
+
+					@EmbeddedId
+					public JoinTableCompositeId getId() {....}
+					setter...
+				}
+				
+
+			** 使用基本数据类型
+				p556 有个参照表
+
+				** 如果希望更加显式地映射字段，那么可以使用@Basic标注它。所有相同的数据类型限制和规则都将应用在@Basic 属性和字段上。
+					也可以使用 fetch 属性决定是懒加载还是立即读取 FetchType.EAGER FetchType.LAZY(可能提供者不支持)
+				** 可以使用 @Basic 的 optional 属性表示该属性可以为null,原生类型的该属性将被忽略，因为原生类型不能为null 
+
+			** 使用类名和其它细节
+				** 默认情况下，JPA将把实体属性映射到同名的列，如果想指定列名称，可以使用 @Column 注解
+				@Column的属性:
+				-> name : 映射到表的哪个列，表名由 @Table 决定
+
+				-> insertable , updatable: 是否在插入和更新时进行持久化,默认为真
+
+				以下属性用于模式生成
+				-> nullable: 列是否应该为NULL或NOT NULL,默认为true
+
+				-> unique；@UniqueConstraint 注解的简写，默认为false
+
+				-> length: 只用在 VARBINARY, VARCHAR列中，默认255
+
+				-> scale: 指示了 decimal 的scale(小数点之前的位数),默认0
+
+				-> precision: 指示了decimal 的精度（小数点之后）,默认0 启用模式生成的话这个是必须的
+
+				-> columnDefinition: 指定生成列的真正SQL，如果使用该属性，程序可能无法在不同的数据库系统之间迁移。
+
+3 创建持久化单元 
+	p564	大概是不用Spring的话怎么使用JPA
+
+4 使用持久化API
+	p565 大概是不用Spring的话怎么使用JPA
+
+5 映射复杂数据类型
+	** 使用枚举作为实体属性
+		-> 有一个枚举
+		public enum Gender{
+			MALE,
+			FEMALE,
+			UNSPECIFIED
+		}
+
+		-> 实体类有一个这种枚举类型
+
+		public class Author ...{
+			....
+			private Gender gender;
+			....
+		}
+
+		在映射枚举类型的时候，JPA将提供整数顺序值来持久化枚举
+		也就是
+		MALE -> 0
+		FEMALE -> 1
+		UNSPECFIED -> 2
+
+		于是就出现了问题;
+			-> 插入数据库的0,1,2 不知道是啥意思
+			-> 如果数据库管理员随便修改了常量的顺序，那么之前存储的顺序都失去了意义
+
+		-> 可以通过Enumerated 注解来改变默认行为。通过它可以修改枚举值被持久化的方式。
+			该注解的唯一属性是 EnumType
+				-> EnumType.ORDINAL : 默认行为，也就是整数值
+				-> EnumType.STRING : 以字符串格式持久化枚举（常量的名字）
+					使用STRING的时候，列不仅必须是字符串类型，还必须是一个Unicode 列(例如使用了UTF-8 或 UTF-16 字符集的NVARCHAR 或者 VARCHAR)
+					（如果数据库供应商已经支持了本地 ENUM类型的话就不用）,需要这样做的原因是Java 枚举类型可以使用一些在 Unicode 中无法正确存储的字符
+
+
+	** JPA处理日期和时间
+		p571
+
+		** 使用JPA时， 类型为 java.sql.Date 的属性将只存储日期。
+		即使数据库列的类型是 DATETIME, 该列的时间不符将全部为0。
+		
+		Time属性将只存储时间,并且数据库列必须只能是TIME列。
+		
+		Timestamp 属性将自动地同时存储日期和时间部分，对应的数据库列必须是DATETIME(或者对等的)
+
+		** 如果使用了 java.util.Date 或者 Calendar，必须使用 @javax.persistence.Temporal 注解，告诉提供者如何持久化类型。
+		属性 value 的值应该是一个 javax.persistence.TemporalType 类型值
+			-> TemporalType.DATE 将 Date 和 Calendar 属性转换为 java.sql.Date，或者从java.sql.Date 转换为 Date 和Calendar
+
+			-> TemporalType.TIME ：将属性转换为Time，或者将 Time 转换为属性。
+
+			-> TemporalType.TIMESTAMP ：将属性转换为 Timestamp, 或者将 Timestamp 转换为属性
+
+		PS：已经是 java.sql.Date,Time,Timestamp 的属性不可以使用该注解
+
+		这样的方法不是很理想，最好自定义转换器来处理各种日期时间的转换
+
+	** 将大字符串映射为 CLOB ,BLOB
+		** 大多数数据库抖提供一种存储大对象的方式(LOB),它可以存储数百万甚至数十亿字节。
+			LOB的文本形式是字符大对象(CLOB),
+			而二进制形式就是二进制大对象(BLOB)
+
+		** JDBC为存储和获取LOB提供了不同的优化机制，它们与标准的 setString 和 setBytes 方法并不兼容，所以我们需要告诉JPA将要存储的值可能是 LOB 值，而不是标准列。
+		通过使用 @javax.persistence.Lob 注解实现。
+		标注了@Lob的字符串和 char[] 将被持久化为 CLOB。
+		所有其它类型，诸如 byte[] 和 Serializable属性，将被持久化为BLOB。
+
+		public class Book implements Serializable{
+			...
+			private byte[] previewPdf;
+
+			....
+
+			@Lob
+			public byte[] getPreviewPdf(){
+				....
+			}
+
+		}
+
+
+6 了解Spring中的事务范围
+	** 在 Spring Framework 中，将使用PLatformTransactionManager 控制事务，也需要为自己的环境定义一个正确的 PlatTransactionManager, 并在根应用上下文中选择一种持久化技术
+
+	**PLatformTransactionManager 中的接口方法不应该被使用，只需要该类的实现即可，Spring将自动代替我们启动，提交和回滚事务。这将通过使用 @org.springframework....Transactional 和 Transactional 注解完成。
+	可以在接口，类，接口方法和类方法上标注这些注解。标注一个接口或者类将影响该接口或类中的所有方法。
+	在接口或类的方法上标注则将会覆盖接口或类上标注的注解。
+
+	** 当Spring遇到一个注解方法时，它将启动一个事务。事务的范围包括该方法的执行，任何被该方法调用的方法的执行等，直到该方法返回。
+	任何由配置的PLatformTransactionManager所覆盖到的和事务范围中使用的受管理资源都将参与到事务中。
+	比如, 如果使用的是 DataSourceTransactionManager,那么从目标数据源中获得的连接将自动参与到事务中。
+	如果使用的是 JmsTransactionManager 管理的事务中执行的Java消息服务操作也将参与该事务。
+
+	** 事务以两种方式终止: 
+		-> 方法成功执行，事务管理器提交事务，
+		-> 方法抛出异常，事务管理器回滚事务。默认，任何RuntimeException 都将导致事务回滚，可以使用任意的@Transactional 注解拓展或限制该过滤器，重新定义哪种情况将会触发事务回滚。
+
+7 为事务和实体管理器使用线程。
+	** Spring会使用 ShardEntityManagerBean.
+	在SpringFramework中配置JPA时，它将创建一个代理了 EntityManager 接口的 SharedEntityManagerBean。然后该代理将被注入到JPA仓库中。当代理实例上的EntityManager方法被调用时，下面的操作将会在后台执行
+		-> 如果当前线程已经存在了一个含有活跃事务的真正的 EntityManager,那么它将把方法的调用委托给 EntityManager。
+		-> 否则，Spring Framework 将从 EnityManagerFactory 中获得一个新的 EntityManager，启动事务，并将它们都绑定到当前线程，然后它将把方法的调用委托给 EntityManager。
+
+	当事务提交或回滚时，Spring将从线程中解除对事务和 EntityManager的绑定，然后关闭Entitymanager。
+	将来在同一线程上(甚至同一请求内)发生的@Transactional 操作将再次启动整个过程，从工厂中获得新的EntityManager并开始新的事务。
+	通过这种方式，任意两个线程都不会同时使用同一个EntityManager，并且指定的线程在给定的时间内只有一个事务和一个活跃的EntityManager。
+
+	** 可以使用 @javax.persistence.PersistenceContext 注解表示Spring 应该为 EntityManager 注入一个代理，而不是在仓库的 EntityManager 字段上标注 @Inject 或者 @Autowired
+
+	@PersistenceContext
+	EntityManager entityManager
+
+	** 普通的EntityManager 不是线程安全的，而且它们总是要求在使用之前开始新的事务。
+	从Spring 中获得一个 @PersistenceContext EntityManager 意味着: 仓库可以在多个线程中使用该实例，并且在后台每个线程都有自己的 EntityManager 实例，它们将代表你对事务进行管理
+
+	** 使用@PersistenceContext的话，还可以给定义的 EntityManager 实例指定一个持久化单元名称。通过这种方式，可以在Spring应用上下文中定义多个持久化上下文配置，并通过指定它的名称表明希望在仓库中使用的 EntityManager 实例。
+
+	public class FooRepository{
+		@PersistenceContext(unitName = "fooUnit")
+		EntityManager entityManager;
+		....
+	}
+
+	public class BarRespository{
+
+		@PersistenceContext(unitName = "barUnit")
+		EntityManager entityManager;
+	}
+
+	** 在Spring中使用JPA时可以使用下面两个实现
+		-> 最标准和常见的是 org.springframework.... JpaTransactionManager。该实现只可以为EntityManager 操作管理事务，并且只可以为单个持久化单元管理事务，大多数情况下可以满足需求
+
+		-> 如果希望在应用程序中使用多个持久化单元或者跨多种类型的资源管理事务（例如EntityManage 和 Java 消息服务资源），那么就需要使用 org.springframework.JtaTransactionManager 或者它的子类之一(WebLogic 服务器上的 WebLogicJtaTransactionManager
+		WebSphere 服务器上的 WebSphereUowTransactionManager)，该实现要求使用一个 Java Transaction API提供者，因此为了使用JPA，需要一个完整的Java EE应用服务器或者复制的独立运行的JTA配置（Tomcat的话）
+
+8 使用异常转换
+	** 直接使用JDBC的时候，所有的JDBC驱动供应商都拥有一套只属于自己的，继承了 SQLException的异常
+
+	** Spring 和它的相关的数据工具，通过定义一个完整的持久化异常（继承自 org.spring.....DataAccessException） 层次解决了这个问题。
+	无论是使用 JDBC,Hibernate 或者 另一额O/RM,还是JPA，Java 数据对象或者NoSQL,都可以在该层次中找到对应的异常，而不是必须使用特定于某种技术的异常。
+
+	** 实现异常转换的两个关键的概念
+		-> 必须在根应用上下文中配置一个或多个 org.spring...PersistenceExceptionTranslator 实现。不同的技术使用的PersistenceExceptionTranslator 实现也不相同。
+		如果需要在应用程序中使用多种持久化技术。比如JPA和NoSQL,那么就需要配置一个处理所有操作的实现或者配置多个实现,对于后者Spring将使用 org.spring....ChainedPersistenceExceptionTranslator 自动将它们连接在一起。
+
+		 Spring 中含有各种用于处理不同持久化技术异常的 PersistenceExceptionTranslator。比较常用的的是LocalContainerEntityManagerFactorybean ，该类能将JPA 异常和底层的JDBC错误代码转换成 DataAccessException。
+		 只要定义好该bean，就等于已经为JPA配置了异常转换。
+		 如果应用程序中使用了多种持久化技术，那么可以为每种技术都配置一个实现。
+
+		 -> 配置了异常转换后，接下来必须使用 @Respository 标注仓库。这将告诉 Spring 被标注的 bean 可以使用已经配置的PersistenceExceptionTranslator 对异常进行转换。
+		 只要该仓库方法抛出了任何持久化异常，PersistenceExceptionTranslator 都将按照需求对这些异常进行转换。
+		 PS： 在仓库中捕获转换后的 DataAccessException 异常是做不到的，因为异常转换尚未发生。只可以在调用仓库方法的代码中捕获 DataAccessException 异常。
+
+9 在Spring Framewwork 配置持久化
+	** 查找数据源，多种方式
+		-> 利用 DriverManagerDataSource 创建出一个数据源
+			不过，没有利用连接池的话，该数据源的连接只能使用一次
+
+		-> 在xml中定以后一个数据源（用户名，密码啥的）
+			在根应用上下文中查找该数据源
+
+			@Bean
+			public DataSource springJpaDataSource(){
+				JndiDataSourceLookup lookup = new JndiDataSourceLookup();
+				return lookup.getDataSource("jdbc/SpringJpa");
+			}
+
+			Tomcat 的 context.xml中
+
+			<Resource name="jdbc/SpringJpa" type="javax.sql.DataSource"
+			maxActive="20" maxIdle="5" maxWait="10000"
+			username="tomcatUser" password="password1234"
+			driverClassName = "com.mysql.jdbc.Driver"
+			defaultTransactionIsolation="READ_COMMITTED"
+			url="jdbc:mysql://localhost/SpringJpa" />
+
+			该数据源无法参与JTA事务，如果希望事务拓展到多个数据源或者多种技术。那么必须定义和查找一个支持JTA的数据源，最好用一个完整的Java EE应用服务器。
+
+	** 创建持久化单元
+		需要配置一个实现了 AbstractEntityManagerFactorybean 的 bean。
+		该类型的bean可以创建 SharedEntityManagerbean，用于管理应用程序中负责线程绑定，链接事务的 EntityManager。
+		多种方式
+		-> 最简单的就是配置一个 LocalEntityManagerFactoryBean,该bean要求 /META-INF/persistence.xml文件必须存在，它将从文件中读取持久化单元配置。在配置 LocalEntityManagerFactoryBean时，还需要指定它应该使用的持久化单元名称。
+
+		@Bean
+		public LocalEntityManagerFactorybean entityManagerFactoryBean() {
+			LocalEntityManagerFactorybean factory = new LocalEntityManagerFactorybean();
+			factory.setPersistenceUnitName("SpringJpa");
+			factory.setJpaVendorAdapter(new hibernateJpaVendorAdaptor());
+			factory.setDataSource(this.springJpaDataSource());
+			return factory;
+		}	
+
+		这种配置的缺点是不灵活
+
+		-> 使用LocalContainerEntityManagerFactoryBean，不要求 persistence.xml 文件必须存在与/META-INF/目录下。
+		可以将持久化文件添加到包中，然后告诉该类其位置即可
+
+		@Bean
+		public LocalContainerEntityManagerFactorybean entityManagerFactoryBean() {
+			LocalContainerEntityManagerFactorybean factory = new LocalContainerEntityManagerFactorybean();
+			factory.setPersistenceXmlLocation("classpath:com/wrox/config/persistence.xml")
+
+			factory.setPersistenceUnitName("SpringJpa");
+			factory.setJpaVendorAdapter(new hibernateJpaVendorAdaptor());
+			factory.setDataSource(this.springJpaDataSource());
+			return factory;
+		}
+
+		-> 使用 RootContextConfiguration 配置持久化单元。可以完全忽略xml文件和持久化单元名称
+
+		/*
+
+		*/
+		@Bean
+		public LocalContainerEntityManagerFactorybean entityManagerFactoryBean() {
+			// 创建了一个Map用于保存JPA的配置属性
+			Map<String., Object> properties = new Hashtable<>();
+			// 这里指的是模式生成的属性
+			properties.put("javax.persistence.schema-generation.database.action", "none");
+			
+			// 配置供应商适配器 
+			将该类设置为工厂的适配器,它起到了多个任务作用
+			适配器只是 org.spring...JpaVendorAdapter 的一个实现，Spring也有EclipseLink 和 OpenJPA的适配器
+
+			/* 
+			->	告诉LocalContainerEntityManagerFactorybean 使用哪个 PersistenceProvider(org.hibernate....HibernatePersistenceProvider) ，它替代了 persistence中的 <provider>
+
+			-> 告诉 SharedEntityManagerBean 要代理的是哪两个类
+				-> org.hibernate......HIbernateEntityManagerFactry，该类已经继承了 EntityManagerFactory
+				-> org.hibernate...HibernateEntityManager,已经继承了 EntityManager
+
+			-> 告诉Spring如何正确地将 Hibernate ORM 特定的JPA异常转换为 DataAccessException
+
+			-> 如果有一些特殊问题将在开始和结束事务时，处理，将由它告知事务管理一些额外的步骤，用于解决。
+
+
+			*/
+			HibernateJpaVendorAdapter adapter = new HibernateJpaVendorAdapter();
+			
+			// 默认的方法指定只适合MySQL4 因此手动指定方言比较好
+			// p583 方言表
+			adapter.setDatabasePlatform("org.hibernate.dialect.MySQL5InnoDBDialect");
+
+			LocalContainerEntityManagerFactoryBean factory = new LocalContainerEntityManagerFactoryBean();
+
+			// 最好手动提供一个，不然有可能不工作
+			factory.setJpaVendorAdapter(adapter);
+			
+			// 设置数据源。它替代的是 persistence.xml 文件中的 <non-jta-data-source> 元素，并且它将把持久化单元的 transaction-type 设置为 RESOURCE_LOCAL
+			// 调用该方法等同于使用 <jta-data-source> 并将 transaction-type 设置为 JTA
+			factory.setDataSource(this.springJpaDataSource());
+			
+			// 告诉LocalContainerEntityManagerFactoryBean扫描该包查找 实体类 bean
+			// 等同于使用 <exclude-unlisted-classes>true<exclude-unlisted-classes>,并使用 <class> 列出所有的实体类
+			// Spring 要快得多
+			factory.setPackagesToScan("com.frank.domian.entities");
+
+			// 设置共享缓存模式。等同于 <shared-cache-mode>
+			factory.setSharedCacheMode(SharedCacheMode.ENABLE_SELECTIVE);
+
+			// 验证模式 等同于 <validation-mode>
+			factory.setValidationMode(ValidationMode.NONE);
+			// 设置JPA属性
+			factory.setJpaPropertyMap(properties);
+			return factory;
+		}
+
+	** 创建事务管理
+		-> 首先需要在RootContextConfiguration 上标注 @EnableTransactionManager 激活事务管理和 @Transactional 方法拦截
+
+		-> 对方法进行增强要注意的方面
+			-> 必须使用相同的 AdviceMode(PROXY或者ASPECTJ)
+				必须使用相同的 proxyTargetClass 值配置 @EnableAsync 和 @EnableTransactionManager
+
+				最简单的方式时使用 AdviceMode.PROXY，并将 proxyTargetClass 设置为假
+
+				PS: 方法增强的注意事项，P585
+
+			-> 要考虑这两种代理的执行顺序。
+				 如果事务管理代理在异步代理之前执行 => 创建异步方法相关的操作将被纳入事务管理，并且线程绑定的事务可能无法正常工作
+
+				 RootContextConfiguration 类将使用这两个注解的 order 特性，保证代理按照正确的顺序执行（在事务管理代理之前执行异步操作代理）
+
+				 @Configuration
+				 @EnableScheduling
+				 @EnableAsync(
+				 	mode = AdviceMode.PROXY, proxyTargetClass = false,
+				 	order = Ordered.HIGHEST_PERCEDENCE
+				 )
+				 @EnableTransactionMangement(
+				 	mode = AdviceMode.PROXY, proxyTargetClass = false,
+				 	order = Ordered.LOWEST_PRECEDENCE
+				 )
+				 ...
+				 public class RootContextConfiguration
+
+		-> 使用 @EnableTransactionMangement 都必须提供一个 PlatformTransactionManager 的默认实现。
+		对JPA，应该使用 org.spring.....JpaTransactionManager。它的构造函数绑定了一个 EntityManagerFactory,所以应该使用之前创建的LocalContainerEntityManagerFacoryBean 构造 JpaTransactionManager
+
+		@Bean
+		public PlatformTransactionManager jpaTransactionManager() {
+			return new JpaTransactionManager(
+				this.entityManagerFactryBean().getObject()
+			); 
+		}
+
+		默认的情况下，事务管理器将查找一个名为 txManager 的 bean，然后返回它可以找到的PlatformTransactionManager 实现的第一个bean
+
+		如果应用上下文可能存在多个PlatformTransactionManager (不知道去找哪个作为管理器，这时候可以自己指定)，配置类可以实现TransactionManagementConfigurer 类， Spring 总是使用 annotationDrivenTransactionManager 方法返回的管理器作为 @Transactional 方法的默认管理器
+
+		....
+		public class RootContextConfiguration implements TransactionManagementConfigurer {
+
+
+			...
+			@Bean
+			public PlatformTransactionManager jpaTransactionManager() {
+				return new JpaTransactionManager(
+					this.entityManagerFactryBean().getObject()
+				); 
+			}
+
+			.....
+			@Override
+			public PlatformTransactionManager annotationDrivenTransactionManager() {
+				// 指定返回这个作为 管理器
+				return this.jpaTransactionManager();
+			}
+		}
+
+10 使用Spring JPA
+	** 注入持久化单元
+	P588 就是在接口里用 @PersistenceContext 注入 EntityManager
+
+	** 实现标准的CRUD操作
+	P589
+
+	** 在 Service 中标记事务范围
+		使用 Spring或JTA的 @Transactional 注解来告诉Spring何时开始以及如何结束一个事务。
+
+		** 使用 @javax.transaction.Transactional 注解时，可以使用 dontRollbackOn 特性定义一个异常的黑名单（不触发回滚）, 使用 rollbackOn 定义一个异常的白名单,覆盖默认的回滚规则(所有的 RuntimeException) 和何时以及如何创建事务的规则(使用 Transactional.TxType 枚举 value 特性)
+
+		** Transactional.TxType包含下列枚举常量:
+			-> MANDAORY 表示事务必须以及存在，不可以创建新的事务，如果事务不存在的话就必须抛出异常。
+
+			-> NEVER 表示必须没有事务存在，禁止使用事务，如果存在事务，则必须抛出异常。
+
+			-> NOT-SUPPORTED 意味着禁止事务，如果存在事务，那么必须将该事务挂起，使代码可以在事务之外执行。当代码执行结束之后，所有挂起的事务必须被恢复。
+
+			-> REQUIRES 意味着必须使用事务。如果不存在事务，那么它应该新建一个事务在方法执行之前开始，并在方法返回之后结束该事务。如果事务已经存在，那么应该使用事务，并允许方法返回之后继续执行。 
+
+			-> REQUIRES_NEW 表示如果不存在事务，那么它应该新建一个事务在方法执行之前开始，并在方法返回之后结束该事务。不过，如果事务已经存在，那么它（旧事务）应该被挂起，并在方法执行之前开始一个新的事务，在方法返回之后，新的事务应该完成，原有的事务也应该恢复
+
+			-> SUPPORTS 是最灵活的指令：必须使用已有的事务。如果不存在事务，刚方法必须在没有事务的情况下执行。
+
+		** org.spring...Transactional 具有特性 noRollbackFor, rollbackFor 和 propagation, 它们分别于JTA（就是上面@javax.transcation.Transcational） 中的 dontRollbackOn, rollbackOn 和 value具有相同的语义。
+		这些特性接受一个字符串类名而不是类。
+		propagation 枚举的常量和 Transactional.TxType 中的常量具有相同的语义
+
+		propagation 中有一个独特的 NESTED常量：如果事务已经存在，那么就创建一个嵌套的事务，否则创建一个新的事务。JpaTransactionManager 时不支持NESTED。只有某些JTA的提供者可能会支持它，不过这样的话迁移性不好。
+
+		这两个@Transactional 注解的默认规则都是 REQUIRED，可以满足平常的需求
+
+		spring的注解包含了别的特性
+			-> org.spring....annotaion.Isolation 枚举设置 isolation,可以指定事务的隔离级别。JpaTransactionManager 和 JtaTransactionManager不支持该特性。
+			这些管理器的事务隔离级别总是JPA 或 JTA 数据源配置中指定的隔离界别，或者JDBC驱动中的默认隔离级别，最好总是在定义数据源资源的时候设置隔离级别
+				隔离级别可选
+					-> NONE
+					-> READ_COMMITTED 默认
+					-> READ_UNCOMMITTED
+					-> REPEATABLE_READ
+					-> SERIALIZABLE 
+
+			-> readObly : JpaTransactionManager 和 JtaTransactionManager不支持该特性。它将指示底层的事务系统：事务中的写操作应该被禁止
+
+			-> timeout: JpaTransactionManager不支持， JtaTransactionManager支持该特性: 将限制事务出现异常终止并回滚之前可以使用的时间。
+
+			PS: 使用JTA的 @Transactional 注解时，Spring总是使用默认的PlatformTransactionManager.它是由TransactionManagementConfigurer 方法返回的，
+			如果 TransactionManagementConfigurer 不存在并且有多个事务管理器存在，那么它就是名为 txManger 的那个 bean，如果只有一个事务管理器，那么它就是该管理器。
+
+			可以在 Spring的 @Transactional 注解中使用多个 PlatformTransactionManager bean。如果忽略了 value 特性，那么它将使用默认的事务管理器，但是我们可以value特性中指定一个 bean名称，并使用该 PlatformTransactionManager bean 
+
+
+			....
+		public class RootContextConfiguration implements TransactionManagementConfigurer {
+
+
+			...
+			// 下面有两个 PlatformTransactionManager
+			// 这个用于JPA,被用作默认的事务管理器
+			@Bean
+			public PlatformTransactionManager jpaTransactionManager() {
+				return new JpaTransactionManager(
+					this.entityManagerFactryBean().getObject()
+				); 
+			}
+
+
+			// 这个用于简单的数据源操作
+			@Bean
+			public PlatformTransactionManager dataSourceTransactionManager() {
+				return new DataSourceTransactionManager(this.springJpaDataSource());
+			}
+			.....
+			@Override
+			public PlatformTransactionManager annotationDrivenTransactionManager() {
+				
+				return this.jpaTransactionManager();
+			}
+		}
+
+		Service 中
+		// 最佳实践是将@Transactional标注在实体类上或者实体类方法上
+		// 标在接口上的话，那么只有使用动态代理 (proxyTargetClass = false) 时,也就是不使用CGLIB代理而是ASTECJ@Transactional 才能正常工作
+
+		public someService{
+			// 使用默认的事务管理器，也就是jpaTransactionManager
+			@Transactional
+			public void actionOne
+
+			@Transactional("jpaTransactionManager")
+			public void actionTwo();
+
+			@Transactional("DataSourceTransactionManager")
+			public void actionThree
+		}
+
+
+11 在DTO和实体之间转换数据
+	** p601
+
+	** 使用BCrypt 包含用户密码
+		比MD5 或者任何其他 SHA算法要好
+		需要使用新的maven 依赖
+
+		p605
+
+	** p606 可以学习 java8 的新API
+
+12 使用 Spring Data JPA 消除公式化的仓库
+	** 使用 Stock 仓库接口
+		在Spring Data Commons 提供的工具中，其中有一个就是 org.spring.Repository<T, ID extends Serializable>接口。
+		所有的Spring Data 仓库接口都必须继承该标记接口（它并未指定任何方法）
+
+		只有继承了该接口的接口才可以用于动态实现。
+
+		-> 继承 org.spring.CrudRepository<t,ID>, 它指定了许多基本 CRUD操作的方法。
+			-> count() 将返回一个 long值，代表继承了 T 的未过滤实体的总数。
+
+			-> delete(T) 和 delete(ID) 将删除单个，指定的实体。
+
+			-> delete(Iterable<? extends T>) 将删除多个实体
+
+			-> deleteAll() 将删除该类型的所有实体。
+
+			-> exists(ID) 将返回一个布尔值，看实体存在与否
+
+			-> findAll() 将返回类型T的所有实体，而findAll(Iterable<ID>)将返回所有代理键对应的类型T的实体。
+			这两个方法都返回 Iterable<T>
+
+			-> findOne(ID) 将获取指定代理键对应的类型T的单个实体。
+
+			-> save(S)将保存（插入或更新）类型S （它继承了类型T）的指定实体，并返回S（已保存实体）
+
+			-> save(iterable<S>) 将保存所有的实体（S继承了T），并将已保存的实体作为新的 Iterable<S> 返回
+
+		-> 想要分页或者排序的功能的话，需要继承 org.spring...PagingAndSortingRespository<T, ID extends Serializable>。
+			-> findAll(Sort) 将使用参数提供的排序指令对所有T实体进行排序，并将结果作为 Iterable<T> 返回。
+
+			-> findAll(Pageable) 将返回一个排序后实体的单个
+				org.spring.domain.Page<T>, 以 Pageable 指令指定的边界为限。
+
+			** org.spring...Sort 对象封装了一些属性信息，用于指定按照哪种方向对结果集进行排序
+				org.spring...Pageable 中封装了一个Sort对象和每页中实体的数目以及将要返回的哪一页（都是整数）。
+				在Web 应用程序中，通常无需自己创建Pageable对象。
+
+				Spring Data 提供了两个 org.spring..HandlerMethodArgumentResovler 的实现
+				-> org.spring...PageableHandlerMethodArgumentResovler 
+				-> org.spring...SortHandlerMethodArgumentResovler
+
+				这两个类可以将 HTTP请求参数转换为 Pageable 和 Sort对象
+
+	** 为搜索实体创建查询方法
+		** 查询方法是专门定义的方法，它们将告诉 Spring Data 如何查找实体。
+			-> 查询方法的名称应以find....By, get....By 或 read...By 开头。然后紧跟着匹配的属性
+		
+			-> 方法参数提供了应该匹配方法名中指定的属性的值(如果值的类型相同，那么它们需要与方法名中列出的属性顺序相同)
+
+			-> 返回类型告诉Spring Data 是应该期待单个结果(T)还是多个(Iterable<T>, List<T>, Collection<T>, Page<T>等)
+
+			PS: 方法名中引用的属性名必须与 实体中的JPA属性名是相匹配的。
+
+
+			** 分页的例子
+
+			Page<Book> findByAuthor(String author, Pageable instructions);
+
+			** 查询方法名中可以添加多个属性，并使用逻辑操作符分隔
+			List<Person> findByFirstNameAndLastName(String fitstName, String lastName)
+
+			** 可以使用 IgnoreCase 显式的表示是否忽略大小
+
+			Page<Person> findByFirstNameOrLastNameIgnoreCase(...)
+			这个例子只有 LastName 会忽略大小。
+			如果想全部忽略，可以使用 AllIgnoreCase 属性
+
+			** 查询复杂属性
+				Person 有一个 address 属性，该属性的类型有一个类型为 PostalCode
+				的 postalCode 属性
+
+				// 不使用分隔符的话会产生歧义，它会首先去找
+				AddressPostalCode 属性而不是Address的PostalCode
+				Page<Person> findByAddress_PostalCode(PostalCode code, Pageable instructions);
+
+			** 使用 Distinct 
+				用法: 
+				findDistinctBooksByAuthor
+
+			** Is Equals 默认的逻辑操作符
+				findByIsbn <=> findByIsbnEquals
+
+			** 除了Or 和And， Not和 IsNot 将对任何关键字进行否定
+
+				findByIsbnIsNot
+
+			** After isAfter 表示属性值应该是一个在指定值之后的日期和时间
+				findByDateFoundedIsAfter(Date date) 
+				之前的话是 Before IsBefore
+			
+			** Containing, IsContaining 和 Contains 表示属性值可以以任何的值开头或结尾，但应该包含指定的值。
+			StartingWith, IsStartingWith, StartsWith,它们表示属性值应该以指定的值开头
+			EndingWith, IsEndingWith 和 EndsWith 表示属性值应该以指定值结尾
+				findByTitleContains(String value)
+
+			** Like 类似于 Contains, StartsWith EndsWith，但是为它提供的参数值中需要包含合适的通配符（Spring Data 不会添加）
+			NotLike 是对其的否定
+				参数应该是 "%Catcher%Rye%"
+				findByTitleLike(String value)
+
+			** Between isBetween 表示属性值应该在两个值之间，所以参数也需要两个
+			可以通过这种方式将 Between 应用在任何能够以数学的方式进行比较的类型上。比如数值或者日期
+				findByDateFoundedBetween(Date start, Date end)
+
+			** Exists 表示某个条件应该存在，其含义随着存储媒介的变化而变化。
+				用法基本等于 SQL 中的 EXISTS 关键字
+
+			** True IsTrue 表示属性值应该为真。而 False 和 IsFalse 则表示属性值应该为假。这些关键字不要求使用方法参数
+
+			** GreaterThan isGreaterThan 表示属性值应该大于参数值。
+			GreaterThanEqual 或者 IsGreaterThanEqual 将参数值纳入到比较范围中。
+			与其相反的的是 LessThan, IsLessThan IsLessThanEqual
+
+			** In 表示属性值必须等于参数指定的多个值中的一个。匹配条件的参数应该是属性的相同类型的 Iterable
+				findByAuthorIn(Iterable<String> authors)
+
+			** Null IsNull 表示属性值应该为 null。这些关键字也不要求使用方法参数
+
+			** Near IsNear WithIn IsWithin 仅对于NoSQL数据库使用
+
+			** Regex, MathchesRegex 和 Matches 表示属性值应该匹配对应方法参数中指定的字符串正则表达式(不适应Pattern)
+
+	** 提供自定义方法实现
+		有两种方式添加自定义行为
+			** 自定义单个仓库 
+				-> 为该自定义创建一个接口。该接口应该从真正的仓库接口中分离出来，并且应该指定所有仓库自定义实现的方法（至少一个）。然后，该仓库接口应该继承自定义的接口
+
+			public interface BookRepositoryCustomization {
+				// 方法名字随便取
+				public Page<Book> findBooksWithQuery(DynamicQuery query, Pageable p);
+
+				public Page<Book> searchBooks(String searchQuery, Pageable p);
+			}
+
+			// 继承该自定义仓库
+			public interface BookRepository extends PagingAndSortingRepository<Book, Long>, BookRepositoryCustomization{
+
+			}
+
+			在使用Spring Data 查找 BookRepository 时，它首先查找相同包中名为 BookRepositoryImpl 的类（或者任意接口名加上Impl）,并将该类实例化和封装为普通的Spring bean。
+
+			该实现类应该实现该自定义仓库接口，并提供所有方法的实现。当调用 BookRepository 上的自定义方法时， Spring Data 将把调用委托给该实现。
+
+			** 自定义所有仓库
+				在某些情况下，可能会希望为特定类型的所有仓库提供相同的自定义方法(例如所有的JPA仓库)。(这种情况不多见，这个创建过程也很复杂)
+
+				-> 创建一个新的接口，继承项目中的特定接口，并指定自定义的单个或多个方法。
+
+					// 阻止Spring Data JPA 检测它并创建它的实现，该接口只是所有仓库的基础接口
+					@NoRepositoryBean
+					// 以JPA作为例子，所以必须继承 JpaRepository,这是Spring Data JPA 将扫描的接口
+					public interface CustomRepository<T, ID extends Serializable> extends JpaRepository<T, ID>{
+						public void customOperation(T entity);
+					}
+					PS； JpaRepository 继承了 CrudRepository 和 PagingAndSortingRepository接口
+
+				-> 指定了新的接口之后，必须继承Spring Data JPA项目提供的基础仓库类
+
+				/*
+					SimpleJpaRepository 类提供了预定义接口方法的基础支撑，
+					比如 findOne(ID), save(T) 
+					如果还希望提供Querydsl 支持，那么应该继承 org.spring....QueryDslJpaRepository, 而不是SimpleJpaRepository
+				*/
+				public class CustomRepositoryImpl<T, ID extends Serializable> extendsSimpleJpaRepository<T, ID> implements CustomRepository<T, ID> {
+					private Class<T> domainClass;
+					private EntityManager entityManager;
+
+					public CustomRepositoryImpl(Class<T> domainClass, EntityManager entityManager) {
+						super(domainClass, entityManager);
+						this.domainClass = domainClass;
+						this.entityManager = entityManager;
+					}
+
+					public CustomRepositoryImpl(JpaEntityInformation<T, ?> information, EntityManager entityManager) {
+						super(information, entityManager);
+						this.domianClass = information.getJavaType();
+						this.entityManager = entityManager;
+					}
+
+					public void customOperation(T){
+						// 实现自定义的操作
+
+					}
+				}
+
+			-> 为所有的仓库提供自定义行为 
+				Spring Data 不会自动使用 CustomRepositoryImpl 作为它的基础仓库类。所以必须创建一个工厂 bean 用于执行该任务，并使用该工厂 bean替换默认的工厂 bean
+
+				// 该工厂被用作创建 CustomRepositoryFactory
+				public class CustomRepositoryFactoryBean<R extends JpaRepository<T, ID>, T, ID extends Serializable> extends JpaRepositoryFactoryBean<R, T, ID>{
+
+					@Override
+					protected RepositoryFactorySupport createRepositoryFactory(EntityManager e) {
+						// 下面那个静态内部类
+						return new CustomRepositoryFactory<T, ID>(e);
+					}
+
+					private static class CustomRepositoryFactory<T, ID extends Serializable> extends JpaRepositoryFactory{
+						// 存储 EntityManager
+						private EntityManager entityManager;
+
+						public CustomRepositoryFactory(EntityManager entityManager) {
+							super(entityManager);
+							this.entityManager = entityManager;
+						}
+
+						@Override
+						@SuppressWarning("unchecked")
+						protected Object getTargetRepository(RepositoryMetadata metadata) {
+							return new CustomRepositoryImpl<T, ID> {
+								(Class<T>) metadata.getDomainType(), this.entityManager
+							};
+						}
+
+						@Override
+						protected Class<?> getRepositoryBaseClass(RepositoryMetadata metadata) {
+							return CustomRepositoryImpl.class;
+						}
+					}
+				}
+
+				p621
+
+	** 配置和创建 Spring Data JPA 仓库
+		Spring Data 项目的有点在于，除非要实现一些自定义行为，否则不需要太多的工作量
+
+		** 启用仓库自动生成
+			有两种配置 xml 和 java
+
+			** 使用 xml
+				p622
+
+			** 使用 java 配置
+				@org.spring...EnableJpaRepositories 注解将替代 <data-jpa:repositories> 命名空间元素。它将注册必要的，相同的 bean,并包含与XML命名空间元素相同的配置选项
+
+				-> basePackages : 必须指定的特性，查看该包和所有的子包，搜索继承了Repositroy 并且未标注 @NoRepositoryBean 的接口，然后为这些接口生成实现
+
+				-> basePackageClasses ： 上述的 class版本
+
+				-> namedQuerirsLocation : 如果使用命名查询，可以使用该特性定义包含这些命名查询的 .properies  文件的位置。Spring Data JPA 无法使用该特性。
+
+				-> repositoryImplementationPostfix: 定义了Spring Data 添加到仓库接口之后的后缀，用于定位自定义方法实现。它的默认值是 Impl,该特性无法所用于所有的项目
+
+				-> queryLookupStrategy : 指定了Spring Data 为查询方法创建查询的方式。默认值是 create-if-not-found，通常这个就可以了，表明 Spring Data应该查找匹配方法名的命名查询，如果它不存在，就按照普通的算法创建一个方法(find..by)。将该特性设置为 create 会禁止命名查询的搜索
+					设置为 use-declared-query 将禁用查询方法算法，只是要命名查询，没找到就失败返回。 
+					并使用 org.spring..QueryLookupStrategy.Key 枚举
+
+				-> repositoryFactoryBeanClass : 可以指定一个不同的仓库工厂，比如 CustomRepositoryFactoryBean(自定义)。只有一部分项目可以设置
+
+				-> transactionManagerRef : 可以指定仓库应该使用的 PlatformTransactionManager bean的名称。未指定的话将使用 Spring Framework所采用的相同算法去决定默认值
+
+				-> entityManagerFactoryRef : 只有Spring Data JPA可以使用，用于指定Spring Data JPA改在JPA操作中使用的EntityManagerFactory。因为通常会配置一个LocalContainerEntityManagerFactoryBean,所以应该直接引用该bean
+
+				-> includeFilters ： 使用一个或多个该元素定义一些额外的条件。接口只有满足这些条件才可以使用自动生成机制。这些条件替代了标注仓库接口而存在。
+
+				-> excludeFilters ： 使用一个或多个该元素从适用于自动生成的仓库接口中排除特定仓库接口
+
+				@Configuration
+				...
+				@EnableJpaRepositories(
+					basePackages = "com.frank.domain.repositories",
+					entityManagerFactoryRef = "entityManagerFactoryBean",
+					transactionManagerRef = "jpaTransactionManager"
+				)
+				...
+				public class RootContextConfiguration implements AsyncConfigurer, SchedulingConfigurer{
+					...........
+				}
+
+				** 如果希望使用Spring Data 的set-dates 和 modify-on-creation 审计设置的默认值，那么可以使用纯java配置，自定义实现一个 AuditorAware 的bean就好了，不过如果要修改默认值，那么必须使用XML，并导入到Java配置中。
+					-> xml审计的配置
+						使用 <data-jpa:auditing> 元素配置实体审计。属性设置如下
+						
+						-> auditor-aware-ref : 是 org.spring..AuditorAware<U> 实现的 bean名称，该bean将决定目前认证的用户或Principal。如果没有该引用，那么审计不会记录修改记录的用户。
+
+						-> set-dates: 布尔值，表示是否在创建或保存实体时设置创建和修改日期。默认为真。
+
+						-> date-time-provider-ref: 使用该特性指定一个 org.spring...DateTimeProvider 实现的 bean的名字，用于决定处于审计目的所使用的日期和时间。默认实现是 org.spring...CurrentDateTimeProvider。 Spring DataCommons 1.7之前，使用一个日期时间提供者要求在类路径上添加Joda Time,1.7之后DateTimeProvider 是基于 Calendar了，就不需要了
+
+						-> modify-on-creation : 该特性也表示是否需要在创建时设置修改日期，它的默认值为真。如果为假，那么修改日期只在更新时保存
+
+
+					大多数情况下，需要以实体为单位配置审计，如下
+					-> Spring Data Commons 之前的版本中，可以审计的实体必须实现 org.springframework....Auditable<U, ID extedns Serializable> 接口，此时U是用户或者 Principal 类型。
+					该接口定义了一个非常固定的属性名，和必须使用 Joda Time的时间戳。
+					所有可审计的实体必须含有 createdBy, createdDate, lastModifiedBy 和 lastModifiedByDate 属性。
+
+					-> Spring Data Commons 1.5之后，可以使用注解将实体属性标记为可审计的属性。
+						一个实体最多可以拥有下列属性注解中的一个（包括从父类中继承的属性）。也就是同一个类中相同的下列注解不能出现两次
+
+						-> @org.spring...CreatedBy 属性值将被设置为登录用户。它的Java类型必须匹配 AuditorAware 实现返回的类型。
+
+						-> @org.spring....CreatedDate 属性值将被设置为当前日期和时间。Spring Data Commons1.7 之前，支持的Java类型只有 long,Long,java.ul.Date 和 org.joda.time.DateTime。1.7之后，还可以使用 Calendar 以及Java8 日期和时间类型Instant,LocalDateTime.OffsetDateTime 和 ZonedDateTime。不过不能使用 Timestamp。无论是什么类型，使用的持久化技术也必须支持这些类型
+
+						-> 更新时,@org.spring...LastModifiedBy 属性将被设置为登录用户。它的Java类型必须匹配 AuditorAware 实现返回的类型。
+
+						-> 更新时,@org.spring....LastModifiedDate 属性将被设置为当前时间。它支持的类型与 @CreatedDate属性相同。
+
+		** 配置SpringMVC支持
+			** Spring Data 可以自动将请求参数转换为String Mvc 处理器方法参数，用于分页和排序。另外，使用仓库时，可以自动将请求参数和路径变量转换为实体类型
+
+			@RequestMapping("/person/{id}")
+			public String viewPerson(@PathVariable("id") Person person){
+				// 方法实现
+			}
+
+			Spring Data 可以接受URL中的ID，在它创建的Person 仓库实现中使用 findOne(ID) 方法获得Person对象，并自动将该Person对象提供给控制器方法。
+
+			该特性是在Spring Data Commons 1.6 中新增的特性，配置很简单。
+			只需要使用@org.spring...EnableSpringDataWebSupport 标注 Dispatcher配置类（有多个的话要配置多个类）
+			这将自动注册一个 org.spring....DomainClassConverter，它将把请求参数和路径变量转换为实体.
+			该注解也会注册 PageableHandlerMethodArgumentResovler 和 SortHandlerMethodArgumentResovler 的bean，用于从请求参数中的到 Pageable 和Sort
+
+			@Configuration
+			// 该注解包含了许多被初始化为默认值的设置。包括参数名称，最大页大小，默认的分页和排序值等（请求参数丢失时），如果要自定义，就不能使用该注解，而是手动配置这些bean
+			@EnableSpringDataWebSupport
+			...
+			public class WebServletContextConfiguration extends WebMvcConfigurerAdapter {
+				...
+			}
+
+			// 手动配置的bean
+
+			...
+			public class WebServletContextConfiguration extends WebMvcConfigurerAdapter {
+				
+				@Inject ApplicationContext applicationContext;
+				...
+				@Override
+				public void addArgumentResolvers(List<HandlerMethodArgumentResovler> resolvers) {
+					Sort defaultSort = new Sort(new Sort.Order(Sort.Direction.ASC, "id"));
+
+					Pageable defaultPageable = new PageRequest(0, 20, defaultSort);
+
+					SortHandlerMethodArgumentResolver sortResolver = new SortHandlerMethodArgumentResolver();
+
+					// sortParameter 默认值为 "sort"
+					sortResolver.setSortParameter("$paging.sort");
+					sortResolver.setFallbackSort(defaultSort);
+
+					PageableHandlerMethodArgumentResolver pageableResolver = new PageableHandlerMethodArgumentResolver(sortResolver);
+					pageableResolver.setMaxPageSize(200);
+					// 分页从第一页开始，而不是0
+					pageableResolver.setOneInexedparameters(true);
+
+					/*
+						pageProperty 默认值为 "page", sizeProperty 默认值为 "size"
+					*/
+					pageableResolver.setPrefix("$paging.");
+					// 上面的代码等同于
+					// pageableResolver.setPageProperty("$paging.page")
+					// pageableResolver.setSizeProperty("$pageing.size")
+
+					pageableResolver.setFallbackPageable(defaultPageable);
+
+					resolvers.add(sortResolver);
+					resolvers.add(pageableResolver);
+				}
+
+				@Override
+				public void addFormatters(FormatterRegistry registry) {
+					if(!(registry instanceof FormattingConversionService)) {
+						log.warn....
+						return;
+					}
+
+					// DomainClassConverter 将自己添加到注册表中
+					DomainClassConverter<FormattingConversionService> converter = new DomainConverter<>((FormattingConversionService) registry);
+					converter.setApplicationContext(this.applicationContext);
+				}
+			}	
+
+			
+
+13 创建复杂条件查询
+	-> 在API中表示搜索条件
+	 最好不要直接使用 JPA Criterion 来创建搜索条件。该API需要一个EntityMananger实例，并且需要访问 domain层的代码（不应该直接从用户界面层直接访问该层代码），因此需要使用某种方式将用户界面中的搜索查询传输到仓库中去。
+	而且必须保证这种代码是可以 跨 domain使用的
+
+	public class Criterion{
+		private final String propertyName;
+		private final Operator operator;
+		private final Object compareTo;
+
+		public Criterion(String propertyName, Operator operator, Object compareTo) {
+			....
+		}
+
+		// accessors
+		public static enum Operator{
+			EQ, NEQ, LT, LTE, GT, GTE, LIKE, NOT_LIKE, IN, NOT_IN, NULL, NOT_NULL
+		}
+	}
+
+	public interface SearchCriteria extends List<Criterion> {
+
+	}
+
+	-> 添加自定义搜索方法
+		仓库中需要一个可以接受 SearchCriteria 参数的自定义搜索方法。它也应该接受 Pageable 并返回 Page<Person>, 这样搜索结果就可以按照分页的方式获取。并且要创造一个可以重用的方法，那么就需要使用泛型类来获得类型参数
+
+		public interface SearchableRepository<T>{
+			Page<T> search(SearchCriteria criteria, Pageable pageable);
+		}
+
+		public interface PersonRepository extends Jparepository<Person, Long>, SearchableRepository<Person> {
+
+		}
+
+		所有可搜索的仓库都可以共享所创健的 search 方法的公共实现，因此为自定义仓库实现一个通用的基类时合理的。
+		方法 search 中的代码需要知道T的类型，但可能其它的通用基类也会需要该信息。所以我们需要创建一个使用抽象类型参数的基类和一个用于搜索的基类。
+
+		// 使用抽象类型参数的基类
+		abstract class AbstractDomainClassAwareRepository<T>
+		{
+		    protected final Class<T> domainClass;
+
+		    @SuppressWarnings("unchecked")
+		    protected AbstractDomainClassAwareRepository()
+		    {
+		        Type genericSuperclass = this.getClass().getGenericSuperclass();
+
+		        while(!(genericSuperclass instanceof ParameterizedType))
+		        {
+		            if(!(genericSuperclass instanceof Class))
+		                throw new IllegalStateException("Unable to determine type " +
+		                        "arguments because generic superclass neither " +
+		                        "parameterized type nor class.");
+
+		            if(genericSuperclass == AbstractSearchableJpaRepository.class)
+		                throw new IllegalStateException("Unable to determine type " +
+		                        "arguments because no parameterized generic superclass " +
+		                        "found.");
+
+		            genericSuperclass = ((Class)genericSuperclass).getGenericSuperclass();
+		        }
+
+		        ParameterizedType type = (ParameterizedType)genericSuperclass;
+		        Type[] arguments = type.getActualTypeArguments();
+		        this.domainClass = (Class<T>)arguments[0];
+		    }
+		}
+
+		// 搜索用的类
+		abstract class AbstractSearchableJpaRepository<T>
+		        extends AbstractDomainClassAwareRepository<T>
+		        implements SearchableRepository<T>
+		{
+		    @PersistenceContext protected EntityManager entityManager;
+
+		    @Override
+		    public Page<T> search(SearchCriteria criteria, Pageable pageable)
+		    {
+		        // 暂时没有定义搜索方法
+		    }
+
+		    private static Predicate[] toPredicates(SearchCriteria criteria, Root<?> root,
+		                                            CriteriaBuilder builder)
+		    {
+		        Predicate[] predicates = new Predicate[criteria.size()];
+		        int i = 0;
+		        for(Criterion c : criteria)
+		            predicates[i++] = c.getOperator().toPredicate(c, root, builder);
+		        return predicates;
+		    }
+		}
+
+		在要使用自定义的仓库实现时，让它实现上面这个搜索用类
+		// 这样到时候 PersonRepository 调用 search方法的时候Spring Data 就会去 使用该实现类，并使用 AbstractSearchableJpaRepository<Person> 的 search方法
+		public class PersonRepositoryImpl extends AbstractSearchableJpaRepository<Person>{
+
+		}
+
+	-> 根据搜索输入创建查询
+		** 扩充 自定义的 Criterion类，每个 Operator 操作符都可以使用 Criterion, Root和 CriteriaBuilder 作为输入，对一个 Predicate 做出准确的评估，每个 Operator都可以定义一个抽象的 toPredicate 方法，并在所有常量中实现。
+
+		public class Criterion
+		{
+		    private final String propertyName;
+		    private final Operator operator;
+		    private final Object compareTo;
+
+		    public Criterion(String propertyName, Operator operator, Object compareTo)
+		    {
+		        this.propertyName = propertyName;
+		        this.operator = operator;
+		        this.compareTo = compareTo;
+		    }
+
+		    public String getPropertyName()
+		    {
+		        return this.propertyName;
+		    }
+
+		    public Operator getOperator()
+		    {
+		        return this.operator;
+		    }
+
+		    public Object getCompareTo()
+		    {
+		        return this.compareTo;
+		    }
+
+		    public static enum Operator
+		    {
+		        EQ {
+		            @Override
+		            public Predicate toPredicate(Criterion c, Root<?>r, CriteriaBuilder b)
+		            {
+		                return b.equal(r.get(c.getPropertyName()), c.getCompareTo());
+		            }
+		        },
+		        NEQ {
+		            @Override
+		            public Predicate toPredicate(Criterion c, Root<?>r, CriteriaBuilder b)
+		            {
+		                return b.notEqual(r.get(c.getPropertyName()), c.getCompareTo());
+		            }
+		        },
+		        LT {
+		            @Override @SuppressWarnings("unchecked")
+		            public Predicate toPredicate(Criterion c, Root<?>r, CriteriaBuilder b)
+		            {
+		                return b.lessThan(
+		                        r.<Comparable>get(c.getPropertyName()), getComparable(c)
+		                );
+		            }
+		        },
+		        LTE {
+		            @Override @SuppressWarnings("unchecked")
+		            public Predicate toPredicate(Criterion c, Root<?>r, CriteriaBuilder b)
+		            {
+		                return b.lessThanOrEqualTo(
+		                        r.<Comparable>get(c.getPropertyName()), getComparable(c)
+		                );
+		            }
+		        },
+		        GT {
+		            @Override @SuppressWarnings("unchecked")
+		            public Predicate toPredicate(Criterion c, Root<?>r, CriteriaBuilder b)
+		            {
+		                return b.greaterThan(
+		                        r.<Comparable>get(c.getPropertyName()), getComparable(c)
+		                );
+		            }
+		        },
+		        GTE {
+		            @Override @SuppressWarnings("unchecked")
+		            public Predicate toPredicate(Criterion c, Root<?>r, CriteriaBuilder b)
+		            {
+		                return b.greaterThanOrEqualTo(
+		                        r.<Comparable>get(c.getPropertyName()), getComparable(c)
+		                );
+		            }
+		        },
+		        LIKE {
+		            @Override
+		            public Predicate toPredicate(Criterion c, Root<?>r, CriteriaBuilder b)
+		            {
+		                return b.like(
+		                        r.get(c.getPropertyName()), getString(c)
+		                );
+		            }
+		        },
+		        NOT_LIKE {
+		            @Override
+		            public Predicate toPredicate(Criterion c, Root<?>r, CriteriaBuilder b)
+		            {
+		                return b.notLike(
+		                        r.get(c.getPropertyName()), getString(c)
+		                );
+		            }
+		        },
+		        IN {
+		            @Override
+		            public Predicate toPredicate(Criterion c, Root<?>r, CriteriaBuilder b)
+		            {
+		                Object o = c.getCompareTo();
+		                if(o == null)
+		                    return r.get(c.getPropertyName()).in();
+		                if(o instanceof Collection)
+		                    return r.get(c.getPropertyName()).in((Collection) o);
+		                throw new IllegalArgumentException(c.getPropertyName());
+		            }
+		        },
+		        NOT_IN {
+		            @Override
+		            public Predicate toPredicate(Criterion c, Root<?>r, CriteriaBuilder b)
+		            {
+		                Object o = c.getCompareTo();
+		                if(o == null)
+		                    return b.not(r.get(c.getPropertyName()).in());
+		                if(o instanceof Collection)
+		                    return b.not(r.get(c.getPropertyName()).in((Collection) o));
+		                throw new IllegalArgumentException(c.getPropertyName());
+		            }
+		        },
+		        NULL {
+		            @Override
+		            public Predicate toPredicate(Criterion c, Root<?>r, CriteriaBuilder b)
+		            {
+		                return r.get(c.getPropertyName()).isNull();
+		            }
+		        },
+		        NOT_NULL {
+		            @Override
+		            public Predicate toPredicate(Criterion c, Root<?>r, CriteriaBuilder b)
+		            {
+		                return r.get(c.getPropertyName()).isNotNull();
+		            }
+		        };
+
+		        public abstract Predicate toPredicate(Criterion c, Root<?> r,
+		                                              CriteriaBuilder b);
+
+		        @SuppressWarnings("unchecked")
+		        private static Comparable<?> getComparable(Criterion c)
+		        {
+		            Object o = c.getCompareTo();
+		            if(o != null && !(o instanceof Comparable))
+		                throw new IllegalArgumentException(c.getPropertyName());
+		            return (Comparable<?>)o;
+		        }
+
+		        private static String getString(Criterion c)
+		        {
+		            if(!(c.getCompareTo() instanceof String))
+		                throw new IllegalArgumentException(c.getPropertyName());
+		            return (String)c.getCompareTo();
+		        }
+		    }
+		}
+
+		创建好了这个之后，就可以用 topredicate 方法将
+		SearchCriteria(自定义的) 转换为CriteriaQuery(JPA的)代码 
+
+		abstract class AbstractSearchableJpaRepository<T>
+		        extends AbstractDomainClassAwareRepository<T>
+		        implements SearchableRepository<T>
+		{
+		    @PersistenceContext protected EntityManager entityManager;
+
+		    // 上文中空缺的代码被填满
+		    @Override
+		    public Page<T> search(SearchCriteria criteria, Pageable pageable)
+		    {
+		        CriteriaBuilder builder = this.entityManager.getCriteriaBuilder();
+
+		        // 查询总页数
+		        CriteriaQuery<Long> countCriteria = builder.createQuery(Long.class);
+		        Root<T> countRoot = countCriteria.from(this.domainClass);
+		        long total = this.entityManager.createQuery(
+		                countCriteria.select(builder.count(countRoot))
+		                        .where(toPredicates(criteria, countRoot, builder))
+		        ).getSingleResult();
+
+		        // 查询所有符合条件的实体并分页
+		        CriteriaQuery<T> pageCriteria = builder.createQuery(this.domainClass);
+		        Root<T> pageRoot = pageCriteria.from(this.domainClass);
+		        // orderBy 方法使用 Pageable 的参数来对记录进行排序
+		        List<T> list = this.entityManager.createQuery(
+		                pageCriteria.select(pageRoot)
+		                        .where(toPredicates(criteria, pageRoot, builder))
+		                        .orderBy(toOrders(pageable.getSort(), pageRoot, builder))
+		        ).setFirstResult(pageable.getOffset())
+		                .setMaxResults(pageable.getPageSize())
+		                .getResultList();
+
+		        // 用 org.spring...PageImpl 来记录Pageable信息，记录总数和结果列表
+		        // JPA返回的列表是懒加载的，所以要新建一个ArrayList
+		        return new PageImpl<>(new ArrayList<>(list), pageable, total);
+		    }
+
+		    private static Predicate[] toPredicates(SearchCriteria criteria, Root<?> root,
+		                                            CriteriaBuilder builder)
+		    {
+		        Predicate[] predicates = new Predicate[criteria.size()];
+		        int i = 0;
+		        for(Criterion c : criteria)
+		        	// 对每个条件根据操作符进行操作
+		            predicates[i++] = c.getOperator().toPredicate(c, root, builder);
+		        // 返回经过条件查询的值
+		        return predicates;
+		    }
+		}
+
+		** 使用该方法的 Contoller代码感觉如下（其中一个查询方法）
+
+		@RequestMapping(value = "/people/find", params = "search=true",
+		        method = { RequestMethod.GET, RequestMethod.POST })
+		private String find(Map<String, Object> model, SearchForm form,
+		                    Pageable pageable) throws ParseException
+		{
+			// 创建自定义的条件查询
+		    SearchCriteria criteria = SearchCriteria.Builder.create();
+		    // 动态查询如果包括这个属性，就将其加入为条件
+		    if(form.isIncludeFirstName())
+		        criteria.add(new Criterion("firstName", Criterion.Operator.EQ, form.getFirstName()));
+		    if(form.isIncludeMiddleInitial())
+		        criteria.add(new Criterion("middleInitial", Criterion.Operator.EQ, form.getMiddleInitial()));
+		    if(form.isIncludeLastName())
+		        criteria.add(new Criterion("lastName", Criterion.Operator.EQ, form.getLastName()));
+		    if(form.isIncludeState())
+		        criteria.add(new Criterion("state", Criterion.Operator.EQ, form.getState()));
+		    if(form.isIncludeCountry())
+		        criteria.add(new Criterion("country", Criterion.Operator.EQ, form.getCountry()));
+		    if(form.isIncludeBirthDate())
+		        criteria.add(new Criterion("birthDate", Criterion.Operator.EQ, new Date(
+		                this.formatter.parse(form.getBirthDate()).getTime()
+		        )));
+		    if(form.isIncludeGender())
+		        criteria.add(new Criterion("gender", Criterion.Operator.EQ, form.getGender()));
+		    if(form.isIncludeRace())
+		        criteria.add(new Criterion("race", Criterion.Operator.EQ, form.getRace()));
+		    if(form.isIncludeEthnicity())
+		        criteria.add(new Criterion("ethnicity", Criterion.Operator.EQ, form.getEthnicity()));
+
+		    model.put("searchForm", form);
+		    // 根据条件返回分页的实体
+		    model.put("results", this.personService.searchPeople(criteria, pageable));
+		    return "people/find";
+		}
+
+		Service代码很简单
+
+		@Override
+		@Transactional
+		public Page<Person> searchPeople(SearchCriteria searchCriteria, Pageable pageable)
+		{	
+			// 注入的是 PersonRepository
+		    return this.repository.search(searchCriteria, pageable);
+		}
+
+
+
+14 在查询中使用OR
+	一个例子，自己揣摩
+
+	pageCriteria.select(pageRoot)
+		.where(
+			builder.or(
+				builder.and(
+					builder.equal(expr), // expr 可以写 root.get("lastName", "Frank") 
+					builder.equal(expr),
+					pageRoot.get("property").in(expr)
+				),
+				builder.or(
+					builder.lessThan(expr),
+					builder.greaterThanOrEqualTo(expr)
+				)
+			),
+			builder.and(
+				builder.equal(expr),
+				builder.greaterThan(expr)
+			)
+		);
+
+15 创建有用的索引改进性能
+	p650
+
+16 使用JPA的全文搜索
+	-> 使用全文搜索前大部分数据库都需要创建全文索引
+		有几点注意:
+		** MyISAM 和 InnoDB 是MySQL中采用的两种不同的引擎，因此它们的全文引擎实现和算法是不同的，其中并无优劣之分。不过使用上的语法是一致的
+
+		** 确保使用InnoDB的版本在 MySQL 5.7.3以上，避免一些严重的问题
+
+		** MyISAM有 543 个默认的终止词（由于其普遍性而从索引中过滤掉的单词），InnoDB只有36个。这个可以自定义添加
+
+		** MyISAM ft_min_word_length 配置 和 InnoDB innodb_ft_min_token_size 配置的目标实际上是一致的。但默认值不同，切换的时候可能需要修改
+
+		创建全文索引的例子语句
+
+		USE CustomerSupport;
+		ALTER TABLE Ticket ADD FULLTEXT INDEX Ticket_Search (Subject, Body);
+		ALTER TABLE TicketComment ADD FULLTEXT INDEX TicketComment_Search(Body);
+
+	-> 创建和使用可搜索的仓库
+		需要自定义仓库才可以使它们变得具有可搜索性
+
+		public class SearchResult<T>{
+			// 实体
+			private final T entity;
+			// 相关性
+			private final double relevance;
+
+			public SearchResult(T entity, double relevance){
+				this.entity = entity;
+				this.relevance = relevance;
+			}
+
+			// accessors
+		}
+
+		public interface SearchableRepository<T>{
+			// 不仅要返回实体，还要返回结果的相关性 
+			Page<SearchResult<T>> search(String query, boolean useBooleanMode, Pageable pageable);
+
+		}
+
+		public interface TicketRepository extends JpaRepository<TicketEntity, Long>, SearchableRepository<TicketEntity> {
+
+		}
+
+		** 使用原生查询和自定义映射进行查询
+			JPA自身并不支持全文搜索。条件API和JPQL也未提供对其的支持。不过JPA运行执行原生查询，将在数据库直接执行。
+			因此，可以使用原生查询在数据库上执行全文搜索，在创建其时可以通过提供 domain 对象的类型来让提供者指定如何将结果集转换为正确的实体。
+
+			然后，还需要一个查询从数据库中获得TicketEntity和自定义列，搜索相关性。也就是说，需要自定义一个自定义结果集映射告诉JPA如何处理额外的列，可以通过@javax.persistence.SqlResultSetMapping 注解实现。
+
+		->  @Entity
+			@Table(name = "Ticket")
+			// 甚至不需要标注在要用的该类上，也可以使用 xml配置，只要JPA提供者能发现它即可
+			@SqlResultSetMapping(
+				// 自定义结果集映射的名字，将在创建使用该映射的查询时引用该名字
+				name = "searchResultMapping.ticket",
+				/*
+					可以使用一个或多个 entities columns classes特性指定如何映射结果集
+
+					entities : 可以指定一个或多个受管理的JPA实体（应该从结果映射成的实体，因此可以使用一个查询返回多个不同的实体）。
+
+					columns: 可以将每个列映射为标量值，如，设置为Double类型。
+
+					classes: 未出现在本例，是一个@javax.persistence.ConstructorResult 注解的数组。通过使用该特性，可以将多个标量值列映射到任意类的构造函数中。并使用这些列构造和返回这个类的对象
+				*/
+				entities = { @EntityResult(entityClass = TicketEntity.class)},
+				columns = {@ColumnResult(name = "_ft_scoreColumn", type = Double.class)}
+			)
+			public class TicketEntity implements Serializable{
+				.......
+			}
+		
+
+			XML的话，使用 <sql-result-set-mapping> 元素
+			通常需要将XML配置放在 /META-INF/orm.xml中。
+			也可以放在 persistence.xml 文件中使用 <mapping=file> 配置为该文件制定一个不同的类路径位置。
+			在Spring的LocalContainerEntityManagerFactoryBean中也可以额指定。
+
+			@Bean
+			public LocalContainerEntityManagerFactoryBean entityManagerFactorybean() {
+				....
+				factory.setJpaPropertyMap(properties);
+				factory.setMappingResource("com/frank/config/mappings.xml");
+				return factory;
+			}
+
+		-> TicketRepositoryImpl 实现了用于在数据库中搜索数据的自定义搜索方法。
+
+public class TicketRepositoryImpl implements SearchableRepository<TicketEntity>
+{
+    @PersistenceContext EntityManager entityManager;
+
+    @Override
+    public Page<SearchResult<TicketEntity>> search(String query, boolean useBooleanMode, Pageable pageable)
+    {
+        String mode = useBooleanMode ?
+                "IN BOOLEAN MODE" : "IN NATURAL LANGUAGE MODE";
+        String matchTicket = "MATCH(t.Subject, t.Body) AGAINST(?1 " + mode + ")";
+        String matchComment = "MATCH(c.Body) AGAINST(?1 " + mode + ")";
+
+        // createNativeQuery 创建原生查询的语句
+        // 这个查询统计匹配票据和含有匹配评论的票据的数据
+        long total = ((Number)this.entityManager.createNativeQuery(
+                "SELECT COUNT(DISTINCT t.TicketId) FROM Ticket t " +
+                        "LEFT OUTER JOIN TicketComment c ON c.TicketId = " +
+                        "t.TicketId WHERE " + matchTicket + " OR " + matchComment
+        ).setParameter(1, query).getSingleResult()).longValue();
+
+        // 返回匹配的票据和评论及其相关性
+        @SuppressWarnings("unchecked")
+        // Object[] 数组的大小等于 @SqlResultSetMapping 注解中指定的映射的数目。根据上文的配置,现在有两个映射（一个映射TicketEntity 实体，另一个用于映射 Double 标量值）, 所以List中的每个Object数组中都包含了两个元素
+        List<Object[]> results = this.entityManager.createNativeQuery(
+                "SELECT DISTINCT t.*, (" + matchTicket + " + " + matchComment +
+                        ") AS _ft_scoreColumn " +
+                        "FROM Ticket t LEFT OUTER JOIN TicketComment c " +
+                        "ON c.TicketId = t.TicketId " +
+                        "WHERE " + matchTicket + " OR " + matchComment + " " +
+                        "ORDER BY _ft_scoreColumn DESC, TicketId DESC", // 备用的排序选项
+                "searchResultMapping.ticket" // 这个地方引用了自定义的结果集映射
+        ).setParameter(1, query)
+                .setFirstResult(pageable.getOffset())
+                .setMaxResults(pageable.getPageSize())
+                .getResultList();
+
+        List<SearchResult<TicketEntity>> list = new ArrayList<>();
+        // 将映射好的结果填充到list中
+        results.forEach(o -> list.add(
+                new SearchResult<>((TicketEntity)o[0], (Double)o[1])
+        ));
+
+        return new PageImpl<>(list, pageable, total);
+    }
+}
+
+		-> 在用户界面中添加搜索
+			在Service 和 Controller中创建相应的方法
+
+		-> 使全文搜索可迁移
+			上述例子是特定于MySQL的
+			P657，比较困难
+
+17 使用 Apache Lucene 实现索引任意数据
+	** p660
+
+
+
+18 转换非标准数据类型
+	** 特性转换器是任意实现了 javax.persistence.AttributeConverter 的类。它的目的是将实体属性在不支持的简单类型和支持的基本类型之间转换。
+	着几乎可以在任何的环境中工作。
+
+	statement 设置的对象和 resultSet获取的对象
+	p668
+
+	AttributeConverter 无法访问 PreparedStatement 和 ResultSet对象。它只可以在自定义类型和JPA支持的目标类型之间转换。因此，你要么需要编写有一个在这些类型和java.sql.Date,Time和Timestamp 之间转换的 AttributeConverter,要么使用供应商提供的API，当然，为了拓展性和可移植性，最好坚持使用 AttributeConverter。
+
+	** 转换注解
+		** @javax.persistence.Converter。
+			一个实现了 AttributeConverter 的具体类要么必须标注上 @Converter，要么必须在JPA映射文件中指定<converter> 元素。
+			如果希望使用的转换器不是持久化单元的根元素或启用了<exclude-unlisted-classes>,那么必须在 persistence.xml 中使用<class> 或者 <jar-file> 表示转换器是一个受管理的类
+			@Converter 的 autoApply 特性（默认 false） 表示JPA提供者是否应该自动将转换器应用在匹配的属性上。因此，特性转换器的定义如下
+
+			@Converter
+			public class InstantConverter implements AttributeConverter<Istant, Timestamp>{
+				....
+			}
+
+		** 如果 autoApply的值为假，那么必须在JPA属性上使用名称相似的 @javax.persistence.Convert属性，表示转换器应用作用于哪个属性上。
+		使用@Convert 的 converter特性可以指定可用的转换器类。可以在字段（使用字段属性访问的话），访问方法（如果使用方法属性访问的话）或者实体上标注@Convert。如果标注在实体上，那么必须指定 attributeName 特性。
+
+		public class MyEntity{
+			// 指定转换器类
+			@Convert(converter = InstantConverter.class)
+			private Instant dateCreated;
+
+			...
+		}
+
+
+		public class MyEntity{
+			private Instant dateCreated;
+
+			...
+
+			@Convert(converter = InstantConverter.class)
+			public Instant getDateCreated() {.....}
+
+		}
+
+		// 单个属性的话
+		@Convert(attributeName = "dateCreated", converter = InstantConverter.class)
+		public class MyEntity{
+			....
+		}
+
+		多个属性的话
+		@Converts({
+			@Convert(attributeName = "dateCreated", converter = InstantConverter.class),
+			@Convert(attributeName = "dateModified", converter = InstantConverter.class),
+		})
+		public class MyEntity{
+			....
+		}
+
+		** 创建和使用特性转换器
+		-> 创建，每个方法中只有一行代码
+
+		// Instant 是Java8 新增的替代 Date 的类，是格林威治时间到现在的转换
+		@Converter
+		public class InstantConverter implements AttributeConverter<Istant, Timestamp>{
+			
+			// 转换为数据库数据
+			@Override
+			public Timestamp convertToDatabaseColumn(Instant instant) {
+				return instant  == null ? null : new Timestamp(instant.toEpochMilli());
+			}
+
+			// 转换为Entity类型
+			@Override
+			public Instant convertToEntityAttribute(Timestamp timestamp) {
+				return timestamp == null ? null : Instant.ofEpochMilli(timestamp.getTime());
+			}
+		}
+
+		-> 使用创建器
+
+		@Entity
+		@Table(name = "UserPrincipal")
+		public class User{
+			....
+			private Instant dateJoined;
+			....
+
+			@Convert(converter = InstantConverter.class)
+			public Instant getDateJoined() {.....}
+			public void setDateJoined(Instant dateJoined) {......}
+
+		-> 最后在 RootContextConfiguration 类中添加 LocalContainerEntityManagerFactory 的packagesToScan 属性。
+		这个属性可保证转换器被添加到持久化单元中，从而使其对整个程序可用。
+
+		@Bean
+		public LocalContainerEntityManagerFactoryBean entityManagerFactoryBean() {
+			...
+			factory.setDateSource(this.advancedMappingDataSource());
+			
+			factory.setPackageToScan("com.wrox.site.entities", "com.wrox.site.converters");
+			
+			factory.setSharedCacheMode(SharedCacheMode.ENABLE.SELECTIVE);
+		}
+
+19 在实体中内嵌POJO
+	** 表示嵌套的类型
+		为了将类标注为可嵌入的，需要在该类上标注 @javax...Embeddable。
+		该类也必须在持久化单元中被注册为受管理的类
+		在xml 的 <exclude-unlisted-classes>
+		或者 Spring 的 LocalContainerEntityManagerFactoryBean 扫描的类中添加它们
+
+		@Embeddable
+		public class PhoneNumber{
+			private String countryCode;
+			private String number;
+		}
+
+	** 使属性称为可嵌入类型
+		在属性上标注 @javax.persiostence.Embedded即可
+		标注之后就不能用其它注解标注了，比如 @Basic,@Temporal或 @Column
+
+		@Entity
+		public class Person
+		{
+			...
+
+			@Embedded
+			public PhoneNumber getPhoneNumber() {....}
+		}
+
+		可嵌入类型自己也可以包含内嵌属性
+
+		@Embeddable
+		public class PostalCode
+		{
+			private String code;
+			private String suffix;
+
+			..
+		}
+
+		@Embeddable
+		public class Address{
+			.....
+
+			@Embedded
+			public PostalCode getPostalCode() {....}
+
+		}
+
+	** 覆盖可内嵌列列名
+		使用 @AttributeOverride 注解可以明确的指定被嵌套的类中需要在嵌套类中映射的属性
+		@AttributeOverrides 可以指定多个
+
+
+		@Entity
+		public class Person{
+			......
+			private Address address;
+			....
+
+			@Embedded
+			// name属性使用点标记可以实现任意深度的覆盖
+			@AttributeOverrides({
+				@AttributeOverride(name = "postalCode.code", column = @Column(name = "Address_PostalCode_Code")),
+				@AttributeOverride(name = "postalCode.suffix", column = @Column(name = "Address_PostalCode_Suffix"))
+			})
+			public Address getAddress(){.....}
+		}
+
+20 定义实体之间的关系
+	** 一对一关系
+
+	@Entity
+	public class Employee{
+		private long id;
+		....
+
+		/*
+			-> mappedBy 是必须的，表示映射到对面实体的哪个属性
+			-> fetch: 表示何时从数据库中获取相关的实体，默认是EAGER，即及时获取
+
+			-> cascade: 指定了级联指令的实体上执行操作时，应该对相关实体采取什么操作
+				-> DETACH
+				-> MERGE
+				-> PERSIST
+				-> REFRESH
+				-> REMOVE
+				-> ALL
+			
+			-> orphanRemoval : 是否应该从数据中删除孤儿实体,默认为假，即即使将 Employee info 的属性设置为 null,那么数据库中的 EmployeeInfo 记录也不会被删除。
+
+			-> optional: 表示关系是否是可选的，如果为假，则意味着关系的两端必须总是有值。默认为真
+		*/
+		@OneToOne(mappedBy = "employee", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+		public EmployeeInfo getInfo() {.....}
+	}
+
+	@Entity
+	public class EmployeeInfo
+	{
+		privae long id;
+		private Employee employee;
+		.....
+
+
+		@OneToOne(mappedBy = "info")
+		@Column(name = "EmployeeId")
+		public Employee getEmployee() {.....}
+		....
+	}
+
+	关系不一定是双向的，也可以只在一个实体中定义这个关系
+
+	** 一对多，多对一
+
+	@Entity
+	public class Applicant{
+
+		private long id;
+		private Set<Resume> resume = new HashSet<>();
+
+		.....
+
+		@OneToMany(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+		// 如果是单向的关系，那么@JoinColumn只能用在这一端
+		@JoinColumn(name = "ApplicantId")
+		public Set<Resume> getResumes() {......}
+	}
+
+	@Entity
+	@Table(name = "Applicant_Resume")
+	public class Resume{
+		private long id;
+		private String title;
+		private String content;
+
+		.........
+	}
+
+	这个是单向关系的
+
+	下面这个是双向关系的
+
+	@Entity
+	public class Applicant{
+		....
+
+		// OneToMany 中不含有 optional 特性，因为一个集合总是可以为空的
+		// 只有@OneToMany 有 mappedBy 特性，因为在一个双向的一对多多对弈中，只有一对多这边需要这样的信息。
+		// 只有@OneToMany 才有 orphanRemoval 特性的注解，因为这样的操作只在关系的这一边有效
+
+		/*
+			综上，在一对多的关系中总结如下
+			-> 多可以没有数据，不影响一这边是一个空集合
+			-> 一必须要指定对应的多，多不一定要指定
+			-> 可以为一指定删除一时，是否要删除所对应的多，删除多种的一个，也不会删除一，所以多的那边无法这样设置
+
+		*/
+		@OneToMany(mappedBy = "applicant", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+		public Set<Resume> getResumes() {.....}
+	}
+
+
+	@Entity
+	@Table(name = "Applicant_Resume")
+	public class Resume{
+		private long id;
+		private Applicant applicant;
+
+		.........
+
+		@ManyToOne(fetch = FetchType.EAGER, optional = false)
+		// 该注解指定了连接两个表的列的细节信息，如果使用的是符合外键，那么可以使用@javax.persistence.JoinColumn 对多个注解进行分组。同时替代了 @Column注解
+		@JoinColumn(name = "ApplicantId")
+		public Applicant getApplicant() {......}
+	}	
+
+
+	如果多的那一边是一个List，那么可以使用 @javax.persistence.OrderColumn 标注 List属性(@OneToMany这边)，并在 多的表中指定应该用于排序列名
+
+	如果多是一个Map, 那么需要从多的表中选择几列用作Map的键。可以在该Map属性上标注 @javax....MapKey,表示用作键
+	使用@javax....MapKeyColumn 指定 Map的键值
+	使用Map之后，也可以使用@OrderColumn 获得一个Map，它们的条目将按照该列进行排序
+
+	** 多对多的关系
+		使用@javax...ManyToMany 注解宣告多对多关系的一边或者两边。它包含了常用的 cascade,fetch和 mappedBy特性。并且只有在宣告的关系是双边的情况下，才必须指定 mappedBy特性，并且如往常一样它的值必须指向关系的另一边的属性。只可以在关系的一边指定 mappedBy(非拥有者这一边，无论以什么方式定义的所有关系)
+
+		多对多关系中，应该使用@javax...JoinTable 注解指定连接表的名称（对多对通常会建一个中间表来连接）（只将该注解添加到关系的所有者的一边（即 mappedBy 对面））。
+		除了表名和其它细节，该注解包含了 joinColumn 和 inverseJoinColumns 特性。
+		使用 joinColumns 指定一个或多个@JoinColumns，用于表示该实体的主键被映射到的一个列或多个列。同样地，使用 inverseJoinColumns 指定一个或多个 @JoinColumns, 用于表示另一个实体（被拥有）的主键所映射到的一个或多个列
+
+		@ManyToMany(fatch = FetchType.LAZY)
+		@JoinTable(name = "School_Student",
+					joinColumns = {@joinColumn(name = "SchoolId")},
+					inverseJoinColumns = {
+						@JoinColumn(name = "StudenId")
+					}) 
+		public List<Student> getStudents() {......}
+
+21 处理其它常见的情况
+	** 使用修订和时间戳版本化实体
+		可以使用@javax....Version 注解创建一些特殊的版本属性。
+
+		@Version 属性的类型可以是 int,Integer,long,Long,short,Short 或者 Timestamp （将来还可以使用Instant）。不能手动设置@Version 属性的值
+		向数据库写入实体的改动时，提供者将会在UPDATE语句中增加该版本号，并包含一个 WHERE 子句，如果版本已经发生了变化，那么该子句的结果将为假。
+		如果因为版本问题无法更改，那么会抛出 OptimisticLockException 异常
+
+		将@Version 的手动设置变成私有或者包保护的比较好
+
+	** 定义公共属性的抽象实体
+		如果某些实体抖包括某些相同的重复属性，比如Id，创建日期，最后修改日期和@Version 属性。对于这种情况，可以创建一个映射父类，只定义实体一次。
+
+		** 一个映射父类与普通实体非常相似。它不包含@Table 注解，而是会使用@javax.persistence.MappedSuperclass 注解替代了 @Entity 注解，之后可以像是要普通实体一样映射其中的任意属性。
+		映射父类中的属性总是映射到最终继承它的@Entity类的表上。
+		在继承层次中也不限制必须使用单个映射父类。可以定义许多个映射父类，并使用一个实体继承所有作为它的祖先的映射父类的属性。
+		
+		一个映射父类或者实体可以通过覆盖父类方法覆盖它继承的属性的列映射，并重新定义@Column 注解。
+		不过，如果通过字段访问而不是方法访问，该方式将无法工作（毕竟字段没有重写的说法）。针对这种情况，需要使用@AttributeOverride 标注类，在 name特性中指定属性名，并提供新的 @Column 定义。
+		无法覆盖 @Basic,@Lob @Temporal @Enumerated @Convert这样的注解和其它的JPA类型注解。
+		比如一个映射父类定义了一个 @Transient属性，那么子类无法覆盖该属性使它变成非@Transient。
+		同时，一个映射父类或实体也不能覆盖一个非@Transient方法，使其变成@Transient的。
+
+		@MappedSuperclass
+		public abstract class BaseEntity{
+			private long id;
+
+			@Id
+			.....
+			public long getId(){....}
+			....
+		}
+
+		@MappedSuperclass
+		public abstract class VersionedEntity extends BaseEntity{
+
+			private long version;
+
+			@Version
+			@Column(name = "Revision")
+			public long getVersion() {.....}
+		}
+
+		@MappedSuperclass
+		public abstract class AuditedEntity extends VersionEntity {
+			private Instant dateCreated;
+			private Instant dateModeified;
+
+			@Convert(converter = InstantConverter.class)
+			public Instant getDateCreated() {....}
+			...
+
+			@Convert(converter = InstantConverter.class)
+			public Instant getDateModified() {....}
+			......
+		}
+
+		定义了三个映射父类后，可以用不同的实体去继承它们
+
+		@Entity
+		// 覆盖 id属性为本表的 ArticleId
+		@AttributeOverride(name = "id", column = @Column(name = "ArticleId"))
+		public class NewsArticle extends AuditedEntity{
+			private String title;
+			private String content;
+
+			@Basic
+			.......
+		}
+
+		当然，跟@Entity一样，@MappedSuperclass 类也必须在持久化单元中注册为受管理的类。
+		必须在持久化单元配置的 <class> 或 <jar-file> 元素中指定它们，并禁止持久化单元配置中的<exclude-unlisted-classes>,
+		或者
+		将其包含在Spring的 LocalContainerEntityManagerFactoryBean将要扫描的类中,一般情况下，放在和entities 包下就好
+
+	** 映射基本的和内嵌的集合
+		**	使用 @javax...ElementCollection 将字段标记为一个基本的或者内嵌类型的集合
+			-> 	targetClass: 可以使用也可以不使用，它指定了Collection 中村粗的元素的类型。不过只要使用了泛型就可以自动发现元素类型，所以可以不指定targetClass 特性。
+
+			-> fectch: 及时加载还是延迟加载，默认为懒加载
+
+		内嵌类型必须与包含它们的实体存储在相同的表中。
+		不过，如果它们是集合属性的一部分，那么它们可以存储在不同的表中。此时，会默认存储在一个名字等于实体表名加上下划线再加上属性名的表中。
+
+		// 该属性默认映射到 Employee_PhoneNumbers 表中，并且该表有一个 EmployeeId(因为在Employee类里面)的外键列，以及 PhoneNumbers列
+		(属性名是 phoneNumbers)		
+		@Entity
+		public class Employee{
+			....
+			@ElementCollection(fetch = FetchType.EAGER)
+			public List<String> getPhoneNumbers() {.....}
+			.... 
+		}
+
+		想要自定义对应的名字的话
+
+		@Entity
+		public class Employee{
+			...
+			@ElementCollection(fetch = FetchType.EAGER)
+			/*
+				通过该注解指定表名和连接的列
+
+				joinColumn中， name指定连接表中的字段，
+				referenceColumn 指定被连接的表中的字段
+			*/
+			@CollectionTable(name = "Employee_Phone", joinColumns = {
+				@JoinColumn(name = "Employee", referencedColumnName = "EmployeeId")
+			})
+			// 只能用于list的排序，这个字段是 Employee_Phone表的字段
+			@OrderColumn(name = "Priority")
+			public List<String> getPhoneNumbers() {.....}
+			....
+
+			@ElementCollection(fetch = FetchType.LAZY)
+			@CollectionTable(name = "Employee_Address", joinColumns =  {
+				@JoinColumn(name = "Employee", referenceColumnName = "EmployeeId")
+			})
+			// 如果集合中存储的是复杂类型，就必须使用如下注解组合来指定映射的字段
+			@AttributeOverrides({
+				@AttributeOverride(name = "street", column= @Column(name = "Street")),
+				@AttributeOverride(name = "city", column= @Column(name = "City")),
+				@AttributeOverride(name = "state", column= @Column(name = "State")),
+				@AttributeOverride(name = "country", column= @Column(name = "Country")),
+			})
+			public Set<Address> getAddress() {......}
+			.......
+		}
+
+		PS: 除了可内嵌的类型和标准的基本类型外，也可以在Collection 属性中存储需要转换的类型，使用@Convert 标准之后，就像它是任何其他的基本属性一样
+
+	** 持久化含有键值对的Map
+		@ElementCollection也可以标注Map属性。
+		Map属性总是将键和值保存在相同的表中，该表与Collection 属性有着相同的默认名。而且也可以使用@CollectionTable 自定义该表的名称。使用@Column 指定存储Map值的列名。
+
+		使用 @javax....MapKeyColumn 指定存储Map键的列名。Map属性也总是应该使用泛型，如果没有使用，就要使用@ElementCollection 的targetClass特性指定值的类型。并使用 @javax...MapKeyClass 指定键所属的类型
+
+		键和值都可以是任意的基本类型，包括枚举和时间类型，任何需要特性转换器的类型和任意的可内嵌类型。
+		不需要再键或值是可内嵌类型的Map属性上指定 @Embedded注解。
+		枚举类型与基本属性的语义相同，可以使用常用的@Enumerated 注解为Map 值覆盖这些语义。
+		使用@javax....MapKeyEnumerated 注解为键覆盖语义。
+		也可以使用@Temporal 为值自定义事件类型的语义。使用@javax....MapKeyTemporal 为键自定义事件类型的语义。
+
+		可以使用Map属性存储某些在编译时无法获知的实体属性，比如自定义字段
+
+		@Entity
+		public class Employee{
+			.......
+			private Map<String, String> extraProperties = new HashMap<>();
+			....
+
+			@ElementCollection(fetch = FetchType.EAGER)
+			@CollectionTable(name = "Employee_Property", joinColumns = {
+				@JoinColumn(name = "Employee", referencedColumnName = "EmployeeId")
+			})
+			// 值的列名
+			@Column(name = "Value")
+			// 键的列名
+			@MapKeyColumn(name="KeyVame")
+			public void setExtraProperties(Map<String, String> extraProperties) {......}
+		}
+
+	** 在多个表中存储实体
+		不是很常见，也就是将一个实体的字段保存在多个表中
+		默认情况下，实体的所有的非Collection，非Map属性都被认为保存在主表中。主表就是在@Table 中指定的表，或者与实体同名的表。
+		存储在副表中的属性应该使用@javax....SecondaryTables 对多个@SecondaryTable 注解进行分组。
+		然后，实体中的每个属性应该被标记上@Column,表示其所属的表。
+		@Id必须保存在主表上
+
+		@Entity
+		@Table(name = "Employee")
+		@SecondaryTables({
+			@SecondaryTable(name = "Employee2", pkJoinColumns = {
+				@PrimaryKeyJoinColumn(name = "Employee",
+					referenceColumnName = "EmployeeId")
+			})
+		})
+		public class Employee{
+			...
+
+			@Basic
+			@Column(name = "FirstName", table="Employee")
+			public String getFirstName() {......}
+			....
+
+			@Basic
+			@Column(name = "LastName", table="Employee2")
+			public String getLastName() {......}
+
+		}
+
+22 创建编程式触发器
+	JPA允许在实体中添加特殊的注解，用于在Java代码中定义编程式触发器，而不是依赖于数据库触发器。
+
+	** 在CRUD操作之前或者之后
+		通过创建一个执行目标逻辑的方法并标记上触发器注解，可以在实体上创建一个触发器。
+		这些方法正式的名称时生命周期事件处理器或者生命周期事件回调方法。是实例方法，并且能够访问实体的所有属性。所以，这些方法可以使用和修改任意的属性。
+		
+		除了在具体实体上标注方法，也可以标注在映射父类的方法上，这些触发器将可以映射到继承了映射父类的所有实体上。
+		这样就可以安全的使用和修改映射父类以及它的祖先的属性。
+
+		** @javax...PreLoad 定义了一个读触发器，该触发器将在实体构造并从结果集中填充之后触发。
+		它是唯一一个没有对应的，在操作之前执行触发器注解的触发器注解，因为实体在构造之前是无法读取的。
+
+		** @PrePersist 方法将在实体持久化之前执行：在EntityManager 上的persist 方法被调用之后，实体真正地附着到EntityManager之前立即执行。
+		PS:在长时间运行的事务中，在方法执行之后，实体被真正写入到数据库之前可能需要花费很长时间
+
+		** @PostPersist 方法将在实体被真正写入数据库（刷新和提交期间，取决于哪个先发生）之后立即调用。在该方法被调用后，事务仍然可以回滚
+
+		** @PreUpdate: EntityManager 一发现实体发生了变化就会立即调用@PreUpdate 方法。
+		在使用JPA时，除非实例是在事务提交之后修改的，否则不需要调用merge 方法更新实体。
+		调用实体上的任意一个设置方法都会改变实体，当事务提交时，即使并未调用 merge 方法，这些改动也会被写入数据库中。
+		一旦实体被设置方法调用修改了，就会立即出发@PreUpdate 触发器。在长时间运行的事务中，在方法执行之后，实体被真正写入到数据库之前可能要花费很长时间。
+
+		总而言之，事务提交之前，调用任何一个set方法都会触发触发器，事务提交之后，改变实体并调用 merge方法会触发触发器
+
+		** @PostUpdate: 在实体的改动被写入到数据库之后立即执行。在该方法被调用之后，事务仍然可以回滚。
+
+		** @PreRemove: 实体被标记为从EntityManager删除之后，@PreRemove 方法将会立即执行。在长时间运行的事务中，在方法执行之后，实体被真正写入到数据库之前可能要花费很长时间。
+
+		** @PostRemove: 方法在实体被真正从数据库删除之后立即调用。在该方法被调用之后，事务仍然可以回滚。
+
+		一个触发器方法可以被用作多个事件的触发器，也就是标注多个注解，但是对于特定的事件，一个实体只能有一个方法处理该事件。包括继承得来的触发器。
+
+		触发器方法必须返回void而且不能使用参数，名字可以随便取，访问修饰符也是随意的。
+		不过不能是静态的，也不应该调用 EnityManager或Query 方法，或者访问任何其它实体。
+		如果一个触发器方法抛出了异常，那么事务将会回滚（可以用其阻止非法的修改）
+
+	** 使用实体监听器
+		一个实体监听器是实体类之外定义触发器方法的构造函数。
+		这些方法将被外部的触发器方法或者外部生命周期事件处理器调用，相对于实体内的触发器方法而言，外部的触发器方法可以保持逻辑与实体类的真正分离。
+
+		实体监听器必须有公开的，无参构造函数，并且可以定义实体内监听器描述的任意的或者所有的触发器方法
+		区别:
+			-> 实体监听器中定义的外部触发器方法必须有一个参数：触发生命周期事件的实体。可以将参数类型设置为模糊的（映射父类或者Object），或者设置为希望使用的具体类型（精确的）
+			-> 从映射父类中继承得到的实体监听器如图内部触发器方法一样，除了不会覆盖继承得到的实体监听器之外。
+			所以，对于相同实体触发的特定生命周期事件可以执行多个触发器方法。
+
+		在执行触发器方法时，提供者首先将调用所有的外部触发器方法，然后调用所有的内部触发器方法。实体监听器中的外部触发器方法将从映射父类祖先的顶层开始执行，一直执行到真正的实体类。
+		还可以定义默认的实体监听器，在所有其它监听器之前执行。这些实体监听器（默认）将作用在应用程序中的所有实体上，但只可以在映射文件（比如 orm.xml）中定义一个默认的实体监听器
+
+		编写一个实体监听器类跟创建一个类并添加触发器方法一样简单。该类不需实现任何接口或者继承任何父类（当然也可以继承）
+		创建该类之后，需要使用@javax...Entitylistener 注解将它附着到实体上。
+		可以将该注解添加到实体类或者映射父类上，从而将监听器附着到该实体类或者映射父类上
+
+		// 附着到映射父类
+		@EntityListeners(Listener1.class)
+		@MappedSuperclass
+		public abstract class AbstractEntity
+		{
+			....
+		}
+
+		// 附着到实体上
+		@EntityListeners({ Listener2.class, Listener3.class })
+		@Entity
+		public class ConcreteEntity extends AbstractEntity{
+			....
+		}
+
+		PS； 如果所创建的实体继承了一个映射父类，但是不希望它继承被映射父类的实体监听器，那么可以使用@javax...ExcludeSuperclassListeners 标注实体。
+		也可以使用@ExcludeSuperclassListeners 标注映射父类，阻止它和它的子类继承祖先的监听器。
+		同样地，也可以在实体或者映射父类上标注@javax...ExcludeDefaultListeners,为它或它的子类排除所有的默认监听器。
+
+23 使用加载时织入延迟加载简单属性
+	
+	对于简单类型的延迟加载，比如
+
+	@Lob
+	@Basic(fetch =FetchType.LAZY)
+	..
+	public byte[] getContexts() {
+		....
+	}
+
+	不同于Map 和 List,Set 这种接口，可以使用代理实现延迟加载
+	如果希望延迟加载 byte[] 或 String, @OneToOne或者@ManyToOne 这种类型的简单属性，那么必须对实体的字节码做出修改，保证它可以拦截获取这些属性的方法调用。这必须要一些配置
+		-> 必须创建一个支持字节码织入的环境，有三种方式:
+			-> 将一个Java代理附着到JVM上（Java 命令的 -agent参数），它将使用一个类文件转换器进行检查，并在必要时转换JVM的类加载器加载所有的类。不过，这对于应用服务器或者Servlet容器环境来说有点过于笨重。
+
+			-> 使用 HIbernate 的 org...InstrumentTask Ant任务（Ant脚本或者 Maven POM 中的Ant 插件使用）。该任务将在编译时修改实体的字节码，就在编译之后，部署应用程序之前。其它的O/RM将提供类似的机制在编译时修饰字节码。
+
+			-> 使用加载时字节码织入 TODO P694
+			
+			使用Spirng的加载时织入特性时，可以在加载类文件时，使用几个可插拔org.spring.......LoadTimeWeaver 实现中的一个转换类 。默认的实现是之前说的Java代理实现。
+			更好的选择是，使用织入器，它将使用容器提供的可编入字节码的ClassLoader
+			Web应用服务器都提供了可编入字节码的ClassLoader，Spring 可以使用它们。
+			Tomcat8之前必须告诉Tomcat 使用一个特殊的 ClassLoader（由Spring提供），该ClassLoader 继承了默认的Tomcat ClassLoader。
+			Tomcat8 之后提供了一个Spring 可以自动使用的Classloader
+
+		-> 配置Spring的加载时织入，就是在RootContextConfiguration 中添加 org.spring...EnableLoadTimeWeaving 注解。它将自动检测并使用Tomcat的可编入ClassLoader。
+		使用一个额外的Hibernate 属性告诉hibernate ORM 使用这个加载时织入
+
+		...
+		@EnableLoadTimeWeaving
+		....
+		public class RootContextConfiguration implements
+					AsyncConfigurer, SchedulingConfigurer,
+					TransactionManagementConfigurer {
+			...
+			@Bean
+			public LocalContainerEntityManagerFactoryBean entityManagerFactoryBean() {
+				...
+				properties.put("hibernate.ejb.use_class_enhancer", "true");
+				...
+			}
+		}
+
+		-> 最后必须考虑这些实体的XML和JSON序列化。
+			在这些类中编入字节码时（在编译时以静态的方式，使用代理或者使用加载时动态织入），Hibernate 可能在实体中添加任意数量未指定的字段和方法。
+			JAXB(用于XML序列化)和Jackson Data Processor（用于JSON序列化）,不知道如何处理这些字段和方法。
+			解决方案:
+				使用@XmlAccessorType 和 @JsonAutoDetect 告诉JAXB和Jackson默认忽略实体的属性，在希望序列化的属性上添加@XmlElement和JsonProperty,并从不希望序列化的属性上移除该注解
+
+				...
+				@XmlAccessorType(XmlAccessType.NONE)
+				@JsonAutoDetect(creatorVisiblity = JsonAutoDect.Visibility.NONE,
+				fieldVisibility = JsonAutoDect.Visibility.NONE,
+				getterVisibility = JsonAutoDect.Visibility.NONE,
+				isGetterVisiblity = JsonAutoDect.Visibility.NONE,
+				setterVisiblity = JsonAutoDect.Visibility.NONE)
+				public class Ticket implements Serializable{
+					....
+					@Xmlelement
+					@JsonProperty
+					public long getId() {.....}
+				}
+
+

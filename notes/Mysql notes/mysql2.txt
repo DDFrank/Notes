@@ -1,0 +1,257 @@
+
+
+一 增删改的语法
+1 增加
+insert into 表名 
+(列)
+values
+(值)
+
+insert into php313
+(name,age,tel)
+values
+('A','79','110'),
+('B','69','112'),
+('c','59','134')
+; 
+可以一次插入多列
+
+2 改
+
+update php313
+set 
+email = 'machao@xiliang.com'
+salary = '39999'
+where id = 6
+
+3 删
+delete from 表明
+where 子句 
+delete不存在删掉哪些列的概念
+
+
+二
+
+1 where针对表文件查询
+having 则是在查询结果中进行筛选
+
+求挂科两科及以上的同学的名字和平均分
+select name ,sum(score < 60) as gk,avg(score) as pj 
+from stu
+group by name
+having gk >= 2;
+
+2 排序可以根据字段来排序
+  根据字段可以升序或者降序排 desc降序 asc升序
+  默认是升序排列
+
+  可以多字段排序 order by 列1(desc/asc),列2(desc/asc)…………
+
+3 limit
+  在语句的最后，起到限制条目的作用
+  limit[offset][N] 可选参数有两个
+  Offset：偏移量 不取的数据
+  set:取出条目
+
+  比如要取四五六名 就是limit 3,3
+
+  取出每个栏目下的最贵的商品
+
+
+五个子句之间有顺序要求 where, group ,having ,order by ,limit
+
+良好的理解模型
+where 表达式，把表达式放在行中，看表达式是否为真
+列：理解成变量，可以运算
+取出结果：理解为一张临时表
+
+三 子查询
+
+1 where型子查询
+把内层查询的结果当做外层查询的条件
+
+
+
+2 from型子查询
+把内层的查询结果当做临时表供外层sql再次查询
+select * from （子句）group by
+
+查询挂科2门及以上同学的平均分及姓名
+select name,avg(score) from stu where name in 
+(select name from   因为查询中有姓名和count两列，所以进一步查询
+ (select name,count(*) as gk from stu 
+  where score <60 group by name
+  having gk >=2) as tmp
+) group by name
+
+3 exisit型子查询
+把外层的查询结果拿到内层去，看内层的查询是否成立
+
+//搜索有商品的栏目
+select cat_id,cat_name from category
+where exists (
+               select * from goods 
+	       where goods.cat_id = category.cat_id
+              );
+
+总结
+where 表达式
+      表达式在哪一行成立，哪一行就取出来
+
+group by
+      分组，一般和统计函数配合使用
+      max,min,avg,sum,count
+ 
+having 表达式
+       数据在表中，表在硬盘或内存以文件形式存在。
+       where就是针对表文件发挥作用的。
+       查询出的结果，也可以看成一张表，其文件一般临时存在于缓冲区。
+       having就是针对查询的结果发挥作用。
+
+order by
+      排序
+      可以针对字段升序，降序排列
+      有可能碰到一个字段排不出结果，可以选用其它字段继续排序。
+
+limit 
+     限制条目
+     limit[offset,] N
+
+
+ 子查询
+ where子查询
+内层的查询结果作为外层查询的比较条件
+
+ from子查询
+ 把内层的查询结果供外层再次查询
+ 注意，内层的查询结果看成临时表，取别名
+
+ exists 子查询
+ 把外层的查询结果代入到内层，看内层是否成立。
+
+
+
+ 四 union
+ select 子句 union select 子句
+
+ 要求：两次查询的列数必须一致
+ 推荐查询的每一列相对应的列类型也一致
+
+ 可以来自于多张表
+ 多次sql语句取出的列名可以不一样，此时结果以第一次查询的为准
+
+ select a1,a2,a3 from 1
+ union
+ select b1,b2,b3 from 2;
+
+将表ta,tb中相同项的值合并起来并输出查询结果
+select id,sum(num) from (
+                         select * from ta 
+			 union 
+			 select * from tb
+                         )as tmp
+group by id 
+
+但是如果不用语句中取出的行有完全相同的（每个列的值得都相同），
+那么相同的行将会合并成一行，即去重复
+
+如果不去重复，可以加all指定
+
+select id,sum(num) from (
+                         select * from ta 
+			 union all  此时不会去重复
+			 select * from tb
+                         )as tmp
+group by id 
+
+如果子句中有order limit等语句，需加（）
+
+(select a1,a2,a3 from 1 order by a1 desc)
+union
+(select b1,b2,b3 from 2 order by b1 desc)
+但是这样分别排序最后结果仍然不会是降序的样子
+所以推荐在最后加排序语句
+
+取第三个栏目价格前三高的商品和第四个栏目价格前两高的商品，用union实现
+
+
+在子句中，order by配合limit使用，才有实际意义。 
+
+五 连接查询 
+
+一张表，就是一个集合，一行数据就是集合的一个元素
+理论上讲：不可能存在完全相同的两个行，但是表中可以完全相同的两行
+因为 表内部有一个rowid
+
+集合相乘，笛卡尔积
+其实就是两个集合的完全组合
+
+
+1 连接上表
+2 连接条件
+
+select goods_id,goods.cat_id,goods_name,shop_price
+from
+goods left join category 连接表
+on goods.cat_id = category.cat_id 连接条件
+
+左连接
+select a1,a2,a3 from
+tableA left join tableB
+on tableA.a1 = tableB.a1 (不一定是等于，有关系就行)
+where group……照常写
+
+右连接
+select a1,a2,a3 from
+tableA right join tableB
+on tableA.a1 = tableB.a1 (不一定是等于，有关系就行)
+where group……照常写
+
+左连接是以左表为准，去右表匹配找数据，找不到的话用NULL补齐
+
+左右连接可以相互转化
+并推荐把右连接转换为左连接来使用，这样兼容性好一些
+
+内连接
+查询左右表都有的数据，即，不要左右中NULL的那一部分
+内连接的集合是左右连接的交集
+
+mysql不支持外连接功能 也就是Outer join
+替代方案用union
+
+
+多表连接的写法
+select a1,A.a2,b1,B.b2,c1
+from
+A left join B
+on A.a2 =B.a2
+left join C
+on B.b2 = C.b2
+
+select a1,a2,B1.b1,a3,B2.b1,b2  
+from A lfet join B as B1
+on A.a1 = B1.b1
+left join B as B2
+on A.a1 = B2.b1; 此处为了提取B表中不同的数据，将B表虚拟成完全相同的B1，B2
+利用三表连接的写法完成需求
+
+六 管理列的增删改
+
+1 列的增加
+
+alter table 表名
+add 列声明
+增加的列默认是在表的最后一列
+
+可以用after来声明新增的列在哪一些后面
+alter table 表名 add 列声明 after 表名
+
+如果新增的列想放在最前面第一列
+alter table 表名 add 列声明 first
+
+2 修改列
+
+alter table 表名 change 被改变列 列声明（包括列名）
+
+3 删除
+alter table 表名 drop 列名；

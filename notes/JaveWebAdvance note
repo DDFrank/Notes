@@ -1,0 +1,1318 @@
+1 init 方法在构造函数调用后调用，此时各项参数已经装配完毕，可以取得ServletContext或使用JDBC
+2 destroy 在GC之前调用，如果应用已经卸载了，但是服务器还在继续，可能要过很久GC才会去回收资源
+	所以一定要在 destroy里面清理资源
+
+3 如果想要 debug Servelt的 destory 方法，必须在命令行下输入 bi\shutdown 命令
+4 raw 未加工的
+5 retrieve 检索
+6 JavaEE7 首次加入了 getContentLengthLong 这个方法，用于获得requestBody 字节超过2G的request
+7 getInputStream 和 getReader 不适用于post方法
+8 在调用 getWriter 之前要先调用 setContentType 和 setCharacterEncoding,不然会无效，当然是在需要调用这两个方法的前提下
+
+9 可以用注解的方式去注册 Servlet
+
+@WebServlet(
+	name = "helloServlet",
+	urlPatterns = {"/greeting", "/salutation", "/wazzup"},
+	/*
+		这样配置的缺点在于，应用启动后除非重新编译否则无法改变其值
+		XML的话重启服务器就可以了
+	*/
+	initParams = {
+		@WebInitParam(name="database", value = "CustomerSupport"),
+		@WebInitParam(name="sever", value="10,0,12.5")
+	}
+)
+public class HelloServelt extends HttpServelt{
+	
+}
+
+这个方式有缺点 TODO
+
+10 可以设置 contextparam 给servlet全局使用 
+
+web.xml
+	
+<context-param>
+	<param-name>settingOne</param-name>
+	<param-value>foo</param-value>
+</context-param>
+
+servlet
+
+ServletContext c = this.getServletContext();
+	c.getInitParameter("settingOne");
+
+每个Servlet都可以使用
+
+11 要设置Servlet私自的 init parameter
+	
+Web.xml
+<servlet>
+	......
+
+	<init-param>
+		<param-name>settingOne</param-name>
+		<param-value>foo</param-value>
+	</init-param>
+</servlet>
+
+Servlet
+
+ServletConfig c = this.getServletConfig();
+c.getInitParameter("settingOne");
+
+12 基于注解配置的缺点
+	-> 不能创建多个实例的servelt ？
+	-> @WebFilter 无法按顺序执行，这个注解没啥用
+	-> 还有一些小配置必须要XML
+
+最好XML，注解，JavaConfig 一起使用
+
+13 volatile
+提醒编译器这个变量的值之后可能会改变，每次读取的时候要从地址读最新值
+而不是从寄存器去读
+
+14 上传
+/*
+	让Servlet具备上传的能力
+	下面这个例子省略了 location属性，也就是决定上传文件的临时存储位置的属性
+	大部分时候都省略
+*/
+@MultipartConfig(
+		// 再写入临时存储位置之前的部分都有多大
+        fileSizeThreshold = 5_242_880, //5MB
+        maxFileSize = 20_971_520L, //20MB
+        maxRequestSize = 41_943_040L //40MB
+)
+
+
+XML的配置使用 <multipart-config> 在<servlet>标签内
+属性的话 <location>, <file-size-threshold>等
+
+13 下载
+		/*
+			Content-Disposition 这个头告诉浏览器去询问要打开还是保存还是别的	
+		*/
+		response.setHeader("Content-Disposition",
+                "attachment; filename=" + attachment.getName());
+        response.setContentType("application/octet-stream");
+
+        ServletOutputStream stream = response.getOutputStream();
+        stream.write(attachment.getContents());
+
+14 永远不要把request或者response的任何属性对象存为静态变量
+
+15 JSP的 include 会从 WebApplication的根目录开始找
+
+16 大多数时候 include 的指令会更快，而且在 被包含的JSP的变量可以使用外层的变量
+	<jsp:include> 的话每次渲染都要载入一遍，而且被包含的JSP里的不可以使用
+	外层的变量
+
+17 写在 <jsp:forward> 后面的内容将被忽略
+
+18 可以在 web.xml 里面对JSP进行统一配置
+<jsp-config>
+	<jsp-property-group>
+		<!-- 可以利用该属性对不同组的jsp进行配置 -->
+		<utl-pattern>*.jsp</url-pattern>
+		<utl-pattern>*.jspf</url-pattern>
+		<page-encoding>UTF-8</page-encoding>
+		
+		要不要写Java小脚本
+		<scripting-prelude>false</scripting-prelude>
+		
+		<!-- 告诉所有JSP先包含这个文件 -->
+		<include-prelude>/WEB-INF/jsp/base.jspf</include-prelude>
+
+		告诉所有JSP最后包含这个
+		<include-coda></include-coda>
+		
+		自动去除 response 里面不要的空行
+		<trim-directive-whitespaces>true</trim-directive-whitespaces>
+		<default-content-type>text/html</default-content-type>
+	</jsp-property-group>
+</jspconfig>
+
+19 URL重写的风险
+	-> 用户复制粘贴URL可能会泄露会话ID，导致个人信息泄露
+	-> 黑客首先去往某个知名网站获取一个会话ID，然后发送给用户一个URL包含
+		了这个会话ID，当用户点击该链接去访问网站的时候，该用户相对于该网站的
+		会话ID就固定为这个了，那么黑客也获得了用户的session
+
+	解决: 禁止URL重写的cookie
+		在用户登录后换会话ID，或者换Session
+
+20 web.xml 配置 
+
+按顺序配置
+<session-config>
+        Session 多久失效,小于0永久有效，默认30
+        <session-timeout>30</session-timeout>
+        	
+        	模式时COOKIE的时候才有用
+        		-> name ； 自己定义名字，默认是JESSIONID
+        		-> domain ,path ；web容器会自己定义，所以最好不要自己定义
+        		-> comment； 可以写任意文字，用于解释COOKIE的目的
+        		-> http-only, secure : 默认都是false，前者最好都打开，后者在有HTTPS的时候打开
+
+	        <cookie-config>
+	            <http-only>true</http-only>
+	        </cookie-config>
+	        
+	        Servlet3.0 才有这个
+	        	-> URL 仅仅采用URL重写(不是很安全)
+	        	-> COOKIE 比较安全
+	        	-> SSL 使用SSL Session 和 HTTP Session ID，非常安全，但是要求全称HTTPS
+	        <tracking-mode>COOKIE</tracking-mode>
+    	
+    	</session-config>
+
+Servlet3.0 开始，上面的大部分（time-out除外）都可以在 ServletContext里面配置
+
+21 request.changeSessionId()； Servlet3.0新增的方法，
+	可以在登录成功后设定来防止Session 固定的攻击
+
+22 可以注册 listener 来监听Session的变化
+	-> 当任何一个类继承 HttpSessionBindingListeners 的时候，（无需注册该Listener）
+		这个类成为Session Attribute的时候的状态就会被监听
+		添加至Session或者从Session Remove的时候就会
+
+	-> 可以使用@WebListener 或者 <listener></listener> 来注册Listener
+		前者写了注解之后在类上实现接口就好， 后者有  <listener-class> 标签
+
+	-> HttpSessionListener 有两个方法
+		-> sessionCreated(HttpSessionEvent e) {
+			syo(this.date() + ": Session " + e.getSession().getId() + "  created");
+		}
+
+		-> sessionDestroyed(HttpSessionEvent e) {
+
+		}
+
+		Log 是最平常的用法
+
+	-> HttpSessionIdListener 之哟一个方法
+		-> sessionIdChanged(HttpSessionEvent e, String oldSessionId) {
+		
+		}
+
+23 Filter的一般应用场景
+	-> 日志过滤器: 通常 web容器提供了请求日志机制，但如果需要在请求日志中显示一些特有信息，那么需要使用过滤器
+
+	-> 验证过滤器: 验证用户的权限
+
+	->  压缩和加密过滤器:不是很常见
+
+	-> 错误处理过滤器:捕捉错误，显示一个用户友好的页面
+
+24 Filter 的顺序问题
+	-> URL映射的优先级高于 Servelt映射
+
+25 Aware 是一个标记接口，其它接口可以继承它来表示对某些框架bean的感知
+
+26 对 bean 的生命周期的操作 p339
+
+27 如果在两个 xml 	文件里面都规定了自动扫描，然而包的范围又有重叠
+一个可选的是排除一个扫描的范围，参考p341
+
+28 如果存在有第三方库的类无法添加注解来生成 bean的话
+	可以在xml中手动注册
+
+29 关于Java配置的许多知识 p342
+
+30 bean definition profile 的内容 345
+
+31 关于 requestMapping
+
+	** 如果requestMapping 是 "viewPoint"
+		Dispatcher 是 "/"
+		那么映射URL是 "/viewPoint"
+
+	** 如果 Dispatcher是 "/store/*"
+		那么映射URL是 "/store/writeReview"
+
+	** 类上的 requestMapping
+		和方法上的requestMapping 之间会自动加 "/"
+
+32 类上面的 requestMapping 也可以指定方法
+	URL会先被 类的方法限制，再被具体方法限制
+
+33 关于参数限制
+	@RequestMapping(value="can", params={"employee", "confirm=true"})
+	这里的参数表明 请求参数中必须含有 params 和 confirm,
+	comfirm的值必须为true,
+	还可以写 myParam != myValue, 表示该请求参数必须不等于该值
+
+	参数限制也可以有类和方法的限制
+
+34 请求头限制
+	具体跟参数限制一样
+
+	@RequestMapping(value="user", headers={"X-Client", "content-type=text/*"})
+
+35 内容类型限制
+	-> consumes 接受一个或多个媒体类型（或媒体类型通配符）
+		它们必须匹配请求的 Content-Type 头
+		因此，其定义了方法可以处理的内容类型
+
+	-> produces 将接受一个或多个媒体类型(或通配符),必须匹配请求的Accept头， 它指定了方法可以产生的内容类型。
+	这样Spring可以决定这些内容类型是否匹配你客户端期望接收的响应类型.
+
+	@RequestMapping(value="song", consumes={"text/json", application/json}, produces={"text/json", "application/json"})
+
+	方法上的内容特性会覆盖类上的特性
+
+36 Controller的方法参数
+	** 标注Servelt类型
+		-> HttpServletRequest
+		-> HttpServletResponse
+		-> HttpSession
+		-> InputStreeam / Reader 用于读取请求正文，但是不能同时使用，完成处理后无需关闭该对象
+		-> OutputStream / Writer 用于编写响应正文，但是不能同时使用。完成处理后不要关闭
+		-> 客户端识别出的 java.util.Locale, 用于本地化
+		-> WebRequest, 不建议使用
+
+	** 注解请求属性
+		-> @RequestParam : 表示被注解的方法参数应该派生自命名请求参数。
+		使用 value 特性指定请求参数的名称
+		设置 required = false 表示该参数不是必须的
+		名称区分大小写
+		不显示的写明参数名称将以方法参数名称代替
+		PS: 在Map<String, String> 类型的单个参数上标注
+		@RequestParam 也可以获得Map中的所有请求参数值
+
+		-> @RequestHeader
+			工作方式与上面一致，提供了对请求头的值的访问，
+			头名称不区分大小写
+
+			L: @RequestHeader("Content-Type") String contentType
+				这种获取单个请求头的数据
+
+			@RequestHeader MultiValueMap<String, String> headers
+			获取所有请求头的数据
+
+			@RequestHeader HttpHeaders headers
+			获取所有请求头的数据
+
+		-> @PathVariable 
+			-> 在URL映射中制定一个URI模板
+			并利用该注解将模板变量用作方法参数的值
+			@RequestMapping(value="user/{userId}", method=RequestMethod.GET)
+			public String user(@PathVariable("userId") long userId) { ... }
+
+			->	模板变量可以包含除了句号以外的任意字符, 可以使用正则表达式来自定义该范围的宽窄
+
+			@RequestMapping(value="user/{userId:\\d+}", method.....)
+			将userId 限制为只能用数字
+
+			-> URL映射中可以包含多个模板变量，每个模板变量都可以有一个关联的方法参数。还可以将类型Map<String, String> 的单个方法参数标注为@PathVariable, 它将包含URL中的所有URL模板变量值
+
+			L: @RequestMapping(value="foo/{var1}/bar/{var2}")
+			public String fooBar(@PathVariable("foo") String foo, @PathVariable("bar") long bar)
+
+			@RequestMapping(value="bar/{var1}/foo/{var2}")
+			public String barFoo(@PathVariable Map<String, String> variables)
+
+
+			-> 提取路径参数 @MatrixVariable
+
+			PS: 路径参数
+			比如URL；htp://www.baidu.com/hotel/43;floor=8;room=15/guest 
+			这里的 floor = 8和room =15 就是路径段 43的路径参数
+			Servlet API 规范要求将URI匹配到Servlet映射之前，
+			必须将路径参数从URL移除
+
+			移除之后的URL是 /hoel/43/guest
+
+			所以要提取路径参数的时候用@MatrixVariable
+
+			@RequestMapping("hotel/{hotelId: \\d+}/guest")
+			public String guestForRoom(@PathVariable("hotelId") long hotelId, @MatrixVariable("floor") short floorNumber, @MatrixVariable("room") short roomNumber)
+
+	** 输入绑定表单对象
+	@RequestMapping(value....)
+	public String jpin (UserRegisterationForm form),,
+
+	会在该 form 里面寻找 set开头的方法.然后开始自动映射，如果没有匹配，参数值就会被忽略
+
+	通常会加上验证
+
+	public String join(@Valid UserRegistrationForm form, BindingResult validation)
+	PS:  x-www-form-urlencoded 的请求正文是表单提交
+	TODO
+
+	** 请求正文转换和实体
+	 -> POST 和 PUT 请求可以包含除了表单提交外的任意数据，比如JSON或XML格式
+	 请求正文也可以包含二进制，base64编码数据或者几乎所有的客户端和服务器可以理解的格式。当该数据代表某种对象时，它通常被引用为请求实体或者HTTP实体。
+	 通过使用@RequestBody注解，Spring将自动将一个请求视图转换为控制器方法参数。
+	 @RequestBody 参数是必需的，但是可以设置 required属性让其可选。
+	 Spring的HTTP消息转换器将自动对请求实体进行转换。不同于@RequestParam 或者上述的是通过 propertyEditor 和 Converter自动从字符串表示转换为目标类型
+	 但是请求实体必必须使用特殊的消息转换器。该转换器必须可以理解源格式(JSON,XML, 二进制等) 和 目标格式(POJO)
+	 TODO
+
+	 @RequestBody 同样可以指定 @Valid,从而触发内容验证，并且可以指定 Error 或者 BindingResult
+	 如果验证失败并且没有上述两个参数，将会抛出 MethodArgumentNotValidException 异常
+
+	 -> 方法还可以接受一个类型为 HttpEntity<?> 的参数。该类型提供了对请求头以及作为类型参数提供的请求正文的访问。所以，可以使用下面的方法替换之前的方法:
+
+	 	public String update(HttpEntity<POJO> request)
+	 	使用该方式将无法触发验证，因此使用须慎重。
+
+	** Multipart请求数据
+		文件上传的 Content-Type 是 multipart/form-data
+
+		表单请求的格式参照 360
+
+		@RequestParam 标注的参数只能让Spring 从URL查询参数中， x-www-form-urlencoded POST 请求正文或者 multipart请求部分中使用该名字抽取对象的值，不过，只能转换为简单类型。因为文件上传既不是字符串也不是简单类型
+
+		@RequestPart 可以标注在任意的参数上，要求该参数是一个 multipart 请求的一部分，并且应该被HTTP消息转换器来转换,它也有requeired属性
+
+		public String upload(@RequestPart("upload") Part upload)
+
+		该方法可以获取单个文件的multipart请求，Spring有內建的HTTP消息转换器可以识别文件的部分。 除了 Part类型，还可以转换为 MultipartFile
+		多文件上传的话，使用数组和集合即可
+
+		public String upload(@RequestPart("uploads") List<MultipartFile> uploads)
+
+		也不是必须要在参数里表明 Part或 MultiPart类型
+		该类型可以为 POJO的字段,Spring将自动获取并正确转换
+
+		PS：除了multipart/form-data 以外请求还可以是 multipart/mixed 。 Spring将把这些部分转换为任意的类型，只要有一个合适的HTTP消息转换器。甚至可以进行验证
+
+		public String update(@Valid @RequestPart("account") Account account, BindResult validation)
+
+		这种方式很不常见
+
+
+37 模型类型
+		** 模型类型
+			Controller方法可以返回一个Map<String, Object>, ModelMap或Model。
+			Spring默认使用 DefaultRequestToViewNameTranstor来确定视图
+
+		** 视图类型
+			-> View 显式的试图对象
+			-> 对View的实现
+			-> 字符串，表示视图的名称
+			-> ModelAndView 同时返回View和模型类型
+
+		** 响应正文实体
+			-> 看可以返回 HttpEntity或者ResponseEntity 
+				Spring将把实体中的正文对象转换为正确的相应内容（基于协商的内容类型，使用合适的HTTP消息转换器）
+				ResponseEntity继承了HttpEntity，添加了设置状态码的能力(HttpStatus)
+
+			-> 可以返回正文对象自身，并使用@ResponseBody 注解该方法,可以起到上个例子的效果。
+				然后还可以使用@ResposneStatus注解该方法,指定响应状态代码, 默认值为 200
+
+				@ResponseBody
+				public User getUser(.....) {
+					.............
+					return this.userService.getUser(id);
+				}
+
+				PS：指定了@ResponseBody时，返回类型（比如视图解析）的其它处理器将被忽略,因此， Spring 将为该样例返回一个String作为真正的响应正文,而不是使用名称解析视图。
+
+					@ResponseBody 会优先于所有其他控制器方法返回值处理器进行处理。
+
+		** 任意返回类型
+			-> 返回其它对象时， Spring将假设该对象时模型的一个属性。它将使用返回类型类名称的驼峰命名法版本作为模型的属性名称
+				PS: 如果该方法注解了@ModelAttribute, 此时Spring将使用注解中指定的名称作为属性名
+
+			L: 
+			@RequestMapping("user/{userId}")
+			public UserAccount viewUser(....) {
+				....
+				// 返回值将变成名为userAccount 的模型特性
+			}
+
+			@RequestMapping("user/{userId}")
+			// 返回值会变成 user 的模型属性
+			@ModelAttribute("user")
+			public UserAccount viewUser(.....) {
+				.......
+			}
+
+		** 异步类型
+			-> 控制器方法还可以返回 Callable<?> 或 DeferredResult<?>。 这些类型将使Spring 在一个单独的线程中使用异步请求处理执行这些返回值，并且释放请求线程用于处理其它请求
+
+			通常只有在对于需要长时间执行的请求才会这样做。
+			如果不希望触发异步请求处理的话,那么上述两种类型的泛型应该是 Controller 控制器返回的类型
+			然后还是可以使用 @ResposneBody @ResponseStatus @NodelAttribute 注解控制器方法，在Callable 或 DerferredResult 返回之后触发合适的处理
+
+			TODO
+
+38 使用显式的视图和视图名称
+	** 如果返回了一个字符串视图名称,则必须使用已经配置的
+		ViewResolver 将视图名称解析成一个真正的视图
+
+		如果方法返回的是模型或者模型属性， Spring首先必须使用已配置的 RequestToViewNameTranslator隐式地将请求转换为视图名称，然后再用 ViewResolver解析
+
+
+	** 使用重定向视图
+			-> 最常见的视图 RedirectView, 它用于将客户端请求发送到一个不同的URL上
+			如果该URL是以吗，某种协议(http://) 或者网络前缀(//) 开头，它就会被认为是一个绝对URL
+
+			如果URL是相对的，那么它将被认为是相对于当前URL的
+			Redirect认为的相对是相对于服务器URL的而不是应用上下文的URL，这几乎在所有情况都是不适用的
+
+			@RequestMapping("/")
+			public View home(Map<String, Object> mode){
+				model.put("dashboardUrl", "dashboard");
+				/*	
+					第一个参数中的 {..} 将被在模型中的属性替换
+					第二个参数表示该URL是相对于上下文的而不是服务器
+				*/
+				return new RedirectView("/{dashboardUrl}", true);
+			}
+
+	** 配置视图解析
+		** 创建一个视图解析器是一个简单的任务，在派发器 servlet 应用上下文中实例化一个框架 bean 即可。
+
+		JSP 的话可以用 InternalResourceViewRsovler，它可以将视图名称转换为JSP文件名，这是通过ServletContentConfiguration的 viewRsovler 方法完成的。
+
+		@Bean
+		public ViewRsovler viewRsovler() {
+			InternalResourceViewRsovler resovler = new InternalResourceViewResovler();
+			resovler.setViewClass(JstlView.class);
+			resovler.setPrefix("/WEB-INF/jsp/view/");
+			resovler.setSuffix(".jsp");
+			return resovler;
+		}
+
+
+39 使用含有模型属性的隐式视图
+	** 如果控制器方法返回的是模型或模型属性，Spring必须自动觉得使用哪个视图。为了实现这一点，它需要结合使用 RequestToViewNameTranslator 和 ViewResovler
+
+	** 配置视图名称转换
+		-> 默认的 DefaultRequestToViewNameTranslator 会取出web应用上下文URL和URL结尾的任何文件拓展名，将剩下的URL变成视图名称
+
+		L: http://localhost:8080/mvc/foo -> foo
+		http://localhost:8080/mvc/foo/bar.html -> foo/bar
+
+		配置如下
+		// 最简单的配置
+		public RequestToViewNameTranslator viewNameTranslator() {
+			return new DefaultRequestToViewNameTranslator();
+		}
+
+	** 使用@ModelAttribute
+
+		@RequestMaqpping(value="/user/home", ...)
+		@ModelAttribute("currentUser")
+		public User userHome(){
+			return user;
+		}
+
+		// 返回的User将添加到模型的属性键 currentUser上
+		// 返回的视图名称是 user/home
+
+40 返回响应视图
+	通常是RESTFUL Web服务或者其他自动化任务的保留任务
+	大多数时候都是JS的Ajax GET 或POST请求
+
+	** 配置消息转换器
+		将消息(请求实体) 转换为控制器方法可以处理的某种Java对象，这根据请求的Content-Type 头实现。
+
+		-> 消息转换器的工作方式有两种
+			-> 将进入的消息转换成Java对象
+			-> 将Java对象转换成发出的消息。
+			这两点是根据已经识别的MIME内容类型的和目标Java类型的简单原则进行操作。
+			每个转换器都可以支持一种或多种MIME Java类型
+
+			没有手动配置的话，Spring将自动创建出足够使用的自动转换器
+
+		-> 要手动配置的话， ServletContentConfiguration 类必须继承WebMvcConigurerAdapter
+		
+		P369
+
+	** 配置内容协商
+		** 客户端向服务器传达一个优先使用的响应内容类型的列表(按照优先级顺序), 然后服务器将从其中选择一个合适的内容类型(没有就默认)的过程
+
+		最大的挑战是分析清楚客户端希望使用的数据格式
+
+		响应包含响应视图，发出的消息将按照下面的多步骤过程选择转换器
+			-> 寻找URL上的文件拓展名,(.html, .xml, .json)
+
+			-> 名为 format 的请求参数
+
+			-> 使用Accept头确定希望返回的响应格式 
+
+			可以改变每个步骤的工作方式，不过不能重新排序
+
+			P371
+
+			重写 WebMvcConfigurerAdapter 中的 configureContentNegotiation 方法以实现该目的
+
+
+	** 使用 @ResponseBody
+		** 现在已经正确的配置了内容协商，接下来就可以在控制器方法中使用它了
+		也就是注解一下 @ResponseBody
+
+		页面应该显示出xml信息，要么因为请求头的Accept包含了 application/xml
+		要么因为XML是默认的内容协商配置
+
+41 在模型中添加表单对象
+	** 很多时候必须将业务对象和表单对象分开
+
+42 使用 Spring <form> 标签
+	
+	P376
+
+	该命名空间标签提供了自动绑定到表单对象内容的字段
+	也就是 Model 中的对象的值 填充 Html input
+
+	-> <form:form> 默认提交到当前页面的URL，表示了表单字段将绑定到哪个模型特性表单对象上. 属性 modelAttribute 指定了 form
+
+	-> <form:checkboxes> 将自动创建一个多选框只读 ,使用 items选择一个集合 ,Map 或对象数组 itemValue itemLabel 分别提供了字段值和字段标签属性
+
+	-> <form:radioButtons> 同上
+
+	-> <form:options> 同上
+
+43 获得被提交的表单数据
+	自动绑定获得
+
+44 启用 multipart支持
+	** p377 用编程的方式配置上传
+	SpringMVC 需要一个 MultipartResovler 的实例，来指定是使用Servlet3.0还是其它的第三方工具
+
+	@Bean
+	public MultipartResovler multipartResolver()
+	{
+		return new StandardServletMultipartResovler();
+	}
+
+45 p378 参考上传的Controller代码
+
+46 下载View p379
+
+47 ComponentScan
+
+@ComponentScan(
+	basePackages = "com.wrox.site",
+	// 下面这个是默认过滤器的配置
+	/*
+		true的时候，将与默认过滤器合并在一起
+		false的时候,那么指定的过滤器将去掉默认的过滤器
+		可以随意自定义组件扫描过滤器
+	*/
+	useDefaultFilters = false,
+	includeFilters = @ComponentScan.Filter(value = Component.class,
+	type = FilterType.ANNOTATION)
+)
+
+@ComponentScan(
+	basePackage = "com.wrox.site",
+	excludeFilters = @ComponentScan.Filter(Controller.class)
+)
+扫描 com.wrox.site 但是忽略 @Controller
+
+@ComponentScan(
+	basePackages = "com.wrox.site",
+	useDefaultFilters = false,
+	includeFilters = @ComponentScan.Filter(Controller.class)
+)
+只扫描 @Controller
+
+这样做实现了为不同的应用上下文使用组件扫描
+
+Service Respository 集中在根应用上下文
+用户界面逻辑留在 Servlet应用上下文
+
+48 使用异步
+	** 执行器 （Executors）： 一个概念，一个用于执行任务的，完成的方式不限
+	** 调度器(Schedulers): 负责记录任务应该什么时候执行，然后按时执行(使用执行器)
+
+	** java.util.concurrent.Executor 定义了一个可以执行监督的Runnable的执行器
+	-> Spring 的 TaskExecutor 继承了该接口
+	-> Spring还提供了 TaskScheduler 接口,指定了几个方法用于调度任务，并在将来的某个时间点运行一次或多次
+
+	以上接口Spring都有许多实现
+	最常见的是 ThreadPoolTaskScheduler 它提供了执行器或调度器，以及一个有序高效的方式执行任务的线程池，当应用程序关闭时，该类将保证它创建的所有线程都被正确的关闭
+	该类也实现了 TreadFactory 接口，因此，可以定义一个ThreadPoolTaskScheduler bean
+	它将满足所有 Executor, TaskExecuor TaskScheduler 或 ThreadFactory上的依赖
+
+49 配置调度器和异步支持
+	为了在@Async 方法上启用异步方法执行,要在 配置类上注解@EnableAsync
+	为了支持@Scheduled  需要 @EnableScheduling注解
+
+	为了自定义异步和计划任务配置，需要实现 AsyncConfigurer 接口返回正确的异步执行器，并通过实现SchedulingConfigurer 类将正确的执行器赋给调度器
+
+	@Configuration
+	// 这个属性: 使用CGLIB库而不是Java接口代理创建含有异步或计划方法的代理类
+	// 通过这种方式，就可以在自己的bean上创建未指定的异步和计划方法。
+	// 如果这个属性为假，那么只有接口指定的方法可以通过计划或异步的方式执行
+	@EnableAsync(proxyTargetClass = true)
+	@EnableScheduling
+	.....
+	public class RootContextConfiguration implements AsyncConfigurer, SchedulingConfigurer
+	{
+
+		// 定义调度器
+		// 该Bean将调度器宝路威任何其他bean都可以使用
+		@Bean
+		public ThreadPoolTaskScheduler taskScheduler(){
+			ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+			scheduler.setPoolSize(20);
+			scheduler.setThreadNamePrefix("task=");
+			scheduler.setAwaitTerminationSeconds(60);
+			scheduler.setWaitForTasksToCompleteOnShutdown(true);
+			scheduler.setErrorHandler(t -> schedulingLogger.error(" Unknown error occurred while executing task.", t));
+
+			scheduler.setRejectExecutionHandler(
+				(r, e) -> schedulerLogger.error(
+					"Execution of task {} was rejected for unknown reasons", r
+				)
+			);
+			return scheduler;
+		}
+
+		// 
+		@Override
+		public Executor getAsyncExecutor() {
+			// 为该异步方法执行使用上述的调度器
+			Executor executor = this.taskScheduler();
+			log...
+			return execuor;
+		}
+
+		@Override
+		public void configureTasks(ScheduledTaskRegistrar registrar) {
+		// 为该计划方法执行上述的调度器
+			TaskScheduler scheduler = this.taskScheduler();
+			log....
+
+			registrar.setTaskScheduler(scheduler);
+		}
+
+
+
+	}
+
+
+50 创建和使用 @Async 方法
+	** 其他bean 中有注入了使用了 @Async 方法的bean的试试，实际上注入的是代理，而不是bean自身
+	然后这些bean将调用代理的方法。
+	代理只是将调用委托给了底层的方法，对于标注了@Async 或者 @Asynchronous 的方法，代理将指示执行器执行该方法，然后立即返回。
+	因为bean自身无法被代理，所以自身的方法不可异步执行，如果希望以异步的方式调用一个方法，那么必须是另一个对象的方法
+
+	public interface NotificationService{
+		// 希望实现是异步的时候，在接口上注解
+		@Async
+		void sedNotification(String subject, String message, Collection<String> recipents);
+
+	}
+
+	@Service
+	public class FakeNotificationService implements NotificationService{
+		
+		@Ovrride
+		@Async
+		public void sendNotification(String subject, String message, Collection<String> recipients) {
+			.......
+
+		}
+	}
+
+51 创建和使用@Scheduled 方法
+	** 与上述方式没有太大区别
+
+	注解了@Scheduled 方法也可以手动调用，如果也注解了@Aysnc,
+	那么手动调用的时候是异步的
+
+	/*
+	intialDelay = 15_00L ； 在Spring启动15秒之后启动
+	fixedDelay = 15_00L : 每隔15秒执行一次
+	*/
+	@Scheduled(fixedDelay = 15_00L, intialDelay = 15_00L)
+
+
+52 在Spring应用上下文中添加由容器管理的对象
+	SessionLitener 是由 Servlet容器管理的对象而不是Springframework管理的对象
+
+	需要通过编程的方式，在运行时向Spring应用上下文中添加一个现有对象
+
+	-> 让SessionListener实现 ServletContextListener接口。这样，SessionListener 可以在容器启动时，在Spring启动之后使用Spring初始化自己。
+
+	-> 使用监听器的 contextInitializaed 方法从ServletContext 中获得根应用上下文，从应用上下文中获得bean工厂，并将SessionListener 实例配置为根应用上下文中的bean。
+
+	public class SessionListener implements HttpSessionListener, HttpSessionIdListener, ServletContextListener {
+
+		@Ovrride
+		public void contextInitialized(ServletContextEvent event) {
+			WebApplicationContext context = WebAoolicationContextUtils.getRequiredWebApplicationContext(event.getServletContext());
+
+			AutowireCapableBeanFactory factory = context.getAutowireCapableBeanFactory();
+
+			factory.autowireBeanProperties(this, AutowireCapableBeanFacory.AUTOWIRE_BY_TYPE, true);
+
+			// 将本类配置为根应用上下文中的bean
+			factory.initializeBean(this, "sessionListener");
+			log......
+		}
+	}
+
+	// 这种方法的bean不是Spring的bean, 无法被其它bean注入，
+	ApplicationContext.getBean() 也不会返回，因为该类未被添加到应用上下文的bean注册表中。
+
+53 使用Spring WebSocket 配置器
+	WebSocket 服务器终端也是容器管理的对象，可以用 52 的方法封装
+
+	但是Spring 通过 SpringConfigurator的方式对服务器终端提供了很好的支持
+
+	-> 使用SpringConfigurator 声明终端
+		@ServletEndpoint(value="/chat/{sessionId}", configurator = SpringConfigurator.class)
+
+		SpringConfigurator 继承了javax..... ServerEndPointConfig.Configurator ，可以保证服务器终端的实例在所有的事件或消息处理方法调用之前，都被正确注入和实例化
+	
+	->  继承SpringConfigurator 接口
+	public static class EndpointConfigurator extends SpringConfigurator {
+		@Override
+		public void modifyHandshake(ServerEndpointConfig config, HandshakeRequest request, HandshakeResponse response) {
+		 	// 自定义配置器
+			..............
+		}
+	}
+
+	这一步之后 可以在该类里使用 @Autowired或者@Inject
+	也可是实现Spring的 Aware接口了，不过该终端永远不会被添加到单例 bean 注册表中
+
+	-> 如果希望注册上面的哪个bean,要在跟应用上下文配置中声明该终端的一个单例
+
+	@Bean
+	public ChatEndpoint charEndpoint() {
+		return new CharEndPoint();
+	}
+
+	这样之后 @ServerEndPoint 注解中指定的 SpringConfigurator 或其子类将不再为每个 WebSocket 连接返回实例了,而是返回单个实例，终端的一个实例将处理多个连接
+
+54 P403 看不懂
+	webSocket 的聊天系统
+
+55  用Spring 配置国际化
+	
+	-> 创建消息源
+		在 RootContextConfiguration 类中创建一个 @Bean 方法，并返回一个自己选择的MessageSource 实现。
+		该bean 必须被命名为 messageSource
+
+	
+		@Bean
+		public MessageSource messageSource() {
+
+			// 可以重新加载的消息源
+			ReloadableResourceBundleMessgaeSource messageSource = new ReloadableResourceBundleMessageSource();
+
+			// 禁止重新加载并使消息源一致缓存消息(直到JVM重启)。
+			/*
+				生产环境推荐这样做，开发的时候可以设置一个正数
+				这样可以在不重启Tomcat的情况下改变本地化消息
+			*/
+			messageSource.setCacheSeconds(-1);
+
+			// defaultEncoding 用于设置在 fileEncoding属性中没找到文件的编码格式
+			// 实际上可以利用 fileEncoding 属性设置每个文件的编码
+			messageSource.setDefaultEncoding(StandardCharsets.UTF_8.name());
+
+			// 寻找这几个消息源
+			messageSource.setBasenames("/WEB-INF/il8n/message", "/WEB-INF/il8n/errors");
+
+			return messageSource;
+		}
+
+		-> 了解区域设置解析器
+			** 类似于视图解析器，Spring将区域设置解析器用作一种为当前请求判断区域设置的策略，这样就可以决定如何本地化消息
+
+			** 区域设置解析器提供了一种获得用户区域设置的方式，而不是光依赖 Accept-Language 头
+
+			** 还为用户提供了修改区域设置的方式(而不是用浏览器的区域设置)
+
+			** 以上功能的常见实现是 SessionLocaleResovler
+			它会使用以下策略
+				** 在当前会话上寻找名字等于 SessionLocaleResovler.LOCALE_SESSION_ATTRIBUTE_NAME 常量的会话特性。如果该特性存在，就返回它的值。
+
+				** SessionLocaleResovler 将坚持它是否设置了 defaultLocale 属性，如果已经设置，就返回该属性的值。
+
+				** 返回 HttpServletRequest 上 getLocale 方法的值(来自 Accept_Language头)
+
+			// 这个最好配置在 Web 相关的 Configuration中，配置到跟上下文的话将导致所有的DispatcherServlet 都使用相同的LocaleResovler
+			@Bean
+			// 名字必须是这个
+			public LocaleResovler localeResovler() {
+				// Dispatcher 将自动检测到该解析器，并将它使用在所有的区域设置 setget 上
+				// 比如，请求处理方法中可能有一个类型为Locale的参数，Spring将使用 LocaleResovler 提供的值作为该参数的值。
+				return new SessionLocaleResovler();
+			}
+
+			** 如上配置之后，Dispatcher 负责使用已配置的解析器在每个进入的请求上设置一个 LocaleResovler请求特性。
+			据此，所有由 DispatcherServlet 执行的或者在 DispatcherServlet 设置该特性之后访问请求对象的任意代码都可以使用 LocaleResovler
+
+			但是错误页面和非JSP视图还不能使用
+			要配置过滤器，具体参考 415
+
+		-> 使用处理拦截器修改区域设置
+			设置不同的区域设置的会话特性需要处理拦截器
+			HandlerInterceptor
+			该拦截器会决定如何拦截 DispatcherServlet 中处理的请求，类似于 Filter
+
+			** LocaleChangeIntereceptor 是一个用于在请求时修改区域设置的HandlerInterceptor。
+			在每个发送到 Dispatcher的请求上， 寻找一个请求参数，该参数默认为 locale(可以自定义).
+			如果该请求参数存在，拦截器会将该字符串参数转换为一个Locale，然后使用LocaleResovler 的 setLocale 方法设置区域设置
+			通过该方式 localeResovler 将同时负责决定如何设置和获得区域设置
+
+			** 重写 ServletContextConfiguration 类中的 WebMvcConfigurarerAdapter 的 addInterceptors 方法
+			如果希望自定义拦截器检查的请求参数，那么可以实例化拦截器,调用 setParamName方法，然后添加到注册表
+
+			@Override
+			public void addInterceptors(InterceptorRegistry registry) {
+				super.addInterceptors(registry);
+
+				// 配置拦截器
+				registry.addInterceptor(new LocaleChangeInterceptor());
+			}
+
+			@Bean
+			public LocaleResovler localeResovler()
+			.....
+
+56 提供一个用户 Profile区域设置
+P418
+
+57 提供时区支持
+	** Spring4 通过了最佳的支持, 为 TimeZone 和 ZoneId 提供了 PropertyEditor ，所以可以直接在 Controller 方法中指定 TimeZone 和 ZoneId 参数, 然后Spring将把请求参数，路径变量和头的值转换为这些方法参数
+
+	** Spring可以解析用户的时区，并提供给Controller方法
+		4.0 之后支持设置和获取当前TimeZone。可以使用该类的静态方法设置用户的TimeZone，Spring将自动设置JSTL TimeZone 属性并提供对TimeZone 和 ZoneId 控制器方法参数的访问
+		所有需要做的就是判断用户希望使用的TimeZone，并在LocaleContextHolder上设置该TimeZone
+
+58	Spring 主题
+	参考419
+
+59 使用 <spring:message> 标签
+		** 使用 messageSource 而不是 ResourceBundle
+			-> 属性 code :指定消息代码,也就是本地化消息的键
+			-> var: 指定保存本地化消息的EL变量
+			-> scope: 控制变量所在的作用域
+			-> javascriptEscape : 为true的话 将消息中的 "" ''
+				替换为 \"" \'' 默认为 false
+			-> htmlEscape ： 将 < > , "" '' 转义为实体转义序列 默认为假
+
+		** 如果页面中大多数或素有的 <spring:message> 标签都应该是HTML转义的话，可以在JSP中使用标签 <spring:htmlEscape defaultHtmlEscape="true" />
+		这样就可以影响之后的 <spring:message>
+
+		** 如果整个应用中大多数都是HTML转义的，可以在 web.xml 或 编程的方式 将上下文初始化参数 defaultHtmlEscape 设置为 true
+		显示设置 htmlEscape 属性可以覆盖
+
+		** <spring:message> 可以指定本地化消息，有下面三种不可同时使用的策略
+
+			-> 使用 code 属性或标签体，也可以嵌套 <spring:argument>。
+				可以使用 text 属性指定一个默认的消息格式（可选）
+
+			-> 使用 code 或标签体作为消息代码，如果必要
+				在 arguments 属性中提供一个使用分隔符分隔的参数列表，默认是单个逗号，可以使用 argumentSeparator 自定义
+
+			->  通过 El 表达式将 MessageSourceResolvable 的实例设置为 message属性
+
+60 国际化消息处理异常
+	P423
+	-> 将 异常信息 error.. = ... 写在消息文件中
+	-> 新建一个类 InternationlizedException  继承 RutimeException, 实现 MessageSourceResovler(保证最后能访问 外部属性文件)
+
+	-> 除了通常的构造器外 重写 MessageSourceRsovler的方法，用于返回属性文件的各种数据
+
+	-> 再新建一个类 LoggedException 继承 InternationlizedException 
+
+	只需要一个提供异常原因和 code 的构造器
+
+	-> 在 Controller 方法里
+		model.put("exception", new InternaltionlizedException("bad.food.exception", "You ate bad food"));
+
+	-> 属性文件里填写好国际化信息
+
+	-> 视图里使用<spring:message>
+	<c:if test="${exception != null}">
+		<spring:message message="${exception}"/>
+	</c:if>
+
+61 渲染视图的时候，如果没有可用的参数，那么格式化器会忽略额外的替换模板,在写入 JS代码时，会直接变成 you are now chatting with {0} ，再用JS的 replace 替换即可
+
+62 webSocket 的国际化
+p428
+
+63 配置Spring 验证 Bean
+	** 获取Spring Framework的验证支持时，需要定义一个同时实现了Validator 和 Spring Validator 的特殊类型 bean(一个继承了 SpringValidatorAdapter的特殊类型 bean)
+		可以选择下面两个类
+			-> javax....CustomValidatorBean
+			-> javax...LocalValidatorFacotoryBean
+		大多数时候选择下面这个，它支持获取底层的Validator,并且支持使用应用程序的其他部分代码中用于国际化的相同MessageSource 和 资源包文件
+
+		@Bean
+		public LocalValidatorFactoryBean localValidatorFactoryBean() {
+			return new LocalValidatorFactoryBean();
+		}
+
+		该Bean 将自动检测到类路径上的Bean Validation 实现
+		使用其默认的ValidatorFactory作为支持工厂，无需创建 validation.xml文件
+
+		如果类路径上存在多个Bean验证提供者，应该手动设置提供者类
+
+		@Bean
+		public LocalValidatorFactoryBean localValidatorFactoryBean() throws ClassNotFoundException {
+
+			 LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
+			 // 动态加载类
+			validator.setProviderClass(Class.forName("org.hibernate.validator.HibernateValidator"));
+
+			return validator;
+		}
+
+64 创建错误代码本地化
+	** Bean验证默认国际化使用资源包 ValidationMessages.properties, ValidationMessages_[language].properties
+
+	Spring的话，只要在RootContextConfiguration 中定义 LocalValidatorFactoryBean中设置有效的MessageSource，就可以自动提供一个由MessageSource 作为支持的插值器
+
+	@Bean
+	public MessageSource messageSource() {
+		ReloadableResourceBundleMessageSource messageSource = new ReloadableResourceBundleMessageSource();
+
+		messageSource.setDefaultEncoding(StandardCharsets.UTF_8.name());
+		messageSource.setBasename(
+		"/WEB-INF/il8n/titles", "/WEB-INF/il8n/messages",
+		"/WEB-INF/il8n/errors", "/WEB-INF/il8n/validation"
+		);
+		return messageSource;
+	}
+
+	@Bean
+	public LocalValidatorFactoryBean localValidatorFactoryBean() {
+		LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
+		validator.setValidationMessageSource(this.messageSource());
+		return validator;
+	}
+
+65 使用方法验证Bean后处理器
+	** bean后处理器: 在容器启动过程之前配置，自定义和替换配置中的 bean
+
+	为了支持方法参数和返回值的验证，需要创建一个 MethodValidationPostProcessor 用于代理被验证方法的执行
+	因为 MethodValidationPostProcessor 将使用类路径上的验证提供者(不含有MessageSource)，配置比较麻烦
+
+	@Bean
+	public LocalValidatorFactoryBean localValidatorFactoryBean() {....}
+
+
+	/*
+		该 processor 将寻找标注了 @Validated 和 @javax .... ValidateOnExecution的类，并为其创建代理，这样被标注参数上的参数验证才可以在方法之前执行，被标注方法上的返回值验证才可以在方法执行之后执行
+	*/
+	@Bean MethodValidationPostProcessor methodValidationPostProcessor() {
+		
+		MethodValidationPostProcessor processor = new MethodValidationPostProcessor();
+
+		processor.setValidator(this.localValidatorFactoryBean());
+		return processor;
+	} 
+
+66 在SpringMvc 中使用相同的验证Bean
+	** SpringMVC Controller 使用的是Spring Validator
+		它支持为期望的@Valid 参数的方法提供 Errors 参数
+		默认SpringMVC将创建一个单独的Spring Validator实例，屏蔽在根应用上下文中创建的验证器实例
+
+		修改 ServletContextConfiguration 类，重写 WebMvcConfigurerAdapter 的 getValidator 方法，并返回根应用上下文中返回的验证器即可
+
+		@Inject SpringValidatorAdapter validator;
+
+		...
+
+		@Override
+		public Validator getValidator() {
+			return this.validator;
+		}
+
+67 在 Bean 中添加约束验证注解
+	** 默认提供的约束,在 javax.validation.constraints包中
+		-> @Null 任何类型 保证被标注的目标为null
+		
+		-> @NotNull 任何类型 保证不为null
+		
+		-> @AssetTrue, @AssertFalse : boolean 或 Boolean
+			保证为 true 或 false 不希望为null的话得使用 @NotNull
+		
+		-> @DecimalMax: 定义了数字类型的上限(在value属性上写明) 使用在类型为 BigDecimal, BigInteger, CharSequence, byte, short,int,long及其包装类型 null值将会通过验证
+		inclusive属性用于指定是否可以包含等于，默认为true
+
+		-> @DecimalMin: 与上述相反
+
+		-> @Digits: 保证被注解的目标是一个可以被解析的数字
+					(假设是字符串),然后测试约束的数字部分
+					必须的integer 属性指定了整数部分的最大值
+					必须的fraction 属性指定了小数部分的最大值
+					null 是有效的
+
+		-> @Future 保证 Date 或 Calendar字段，参数或方法返回值是将来的某个时间点。尚不支持 java 8的新API
+
+		-> @Past 保证 Date 和 Calendar字段是过去的某个时间
+
+		-> @Max and @Min 和DecimalMax 和 @DecimalMin 一样。但是它们不支持字符串类型，而且没有 inclusive属性
+
+		-> @Pattern 约束目标字符串必须匹配的正则表达式 regexp,null是有效的
+		flag 属性 可选 可以支持一个任意的Pattern.Flag 枚举值的数组。支持的选项有
+			-> CANON_EQ : 启用正则等价
+			-> CASE_INSENSITIVE : 大小写不敏感匹配
+			-> COMMENTS : 支持在模式中使用空格和注释
+			-> DOTALL : 启用 dotall 模式
+			-> MULTILINE ； 启用多行模式
+			-> UNICODE_CASE : Unicode字符大小写不敏感
+			-> UNIX_LINES ； 启用Unix 换行模式
+
+		-> @Size 包含了最大和最小约束，用于约束字符串的长度，集合的数量.map中条目的数量和任意数组的长度
+
+	** 常见的约束属性
+		-> message : 定义了应该显示给用户的信息，如果被花括号括起来了(message = "{employee.firstName.notBlank}")那么就是要一个需要在显示之前进行本地化的消息代码。
+		否则就是硬编码
+		
+		-> groups: 定义了当前约束所属的一个或多个验证组，默认为空数组，意味着该约束只属于默认的组
+
+		-> payload: 另一个数组。Payload 为验证提供者或者评估约束的 ConstraintValidator 提供了某些类型的元数据信息。这将使 payload 无法在提供了(也就是默认提供的)內建约束类型(该API未定义 payload的类型)的验证提供者之间进行迁移，但是该属性在自定义约束中很有用
+
+		-> @List的内部注解，运行将多个该类型的约束应用到目标上
+
+68 使用@Valid 实现递归验证
+	** 对于POJO中的复杂字段，要标注@Valid 进行级联验证
+		(也就是说，先对这个类的验证注解进行验证)
+
+		@Valid
+		private Station origin
+
+		如果递归引起了无限循环，验证回到初始对象的时候，将终止字段的验证，并且不返回错误
+
+69 使用验证组
+	** 验证组提供了一种根据约束所属的组合当前活跃的分组。
+		一个一组由一个任意的标记接口表示。该接口无需任何内容，只是起到标记作用
+		该接口所声明的类对象在声明约束时标志了不同的组。
+		然后在验证时，验证器只会从 validate, validateProperty, validateValue 方法调用中指定的分组类所包含的约束
+		P443
+
+		@Size.List({
+				@Size(min=5, max = 100. groups = {Default.class, Group1.class}),
+				@Size(min=20, max=75,groups=Group2.class)
+		})
+		private String value;
+
+		准备验证的时候，在调用Validator 时传入合适的分离即可，它将会应用分配这些分组的约束，javax...groups.Default 还有一个默认的分组
+
+		// in method for step1
+		Set<ContraintViolation<Form>> viiolations = validator.validate(form, Default.class, UIScreen1.class)
+
+		// in method for step2
+		Set<ContraintViolation<Form>> viiolations = validator.validate(form, Default.class, UIScreen1.class, UIScreen2.class)
+
+		// in method for step 3
+		Set<ContrainViolation> violation = validator.validate(form, Default.class, UIScreen1.class, UIScreen2.class, UIScreen3.class)
+
+		未声明分组的约束将默认在default组里面		
+
+70 编译时检查约束合法性
+	使用Hibernate Validator 提供了编译时注解处理器
+	p445
+
+71 为方法验证配置 Spring Bean
+	想让验证自动发生，而不是调用 Validator 
+	** 不要在接口的实现的方法参数上注解限制注解，只在接口的方法参数上进行注解，不然别人在调用一个接口上没有约束但是实现上有约束的方法时，就会报错
+
+	** 在方法参数上使用限制和递归验证
+
+		public Employee getEmployee(@Min(value = 1L, message="{validate.employeeService.getEmployee.id}") long id);
+
+		递归验证
+		public void saveEmployee(@NotNull(message = "{validate.employeeService.saveEmployee}")
+		@Valid Employee employee);
+
+		// 先检查 Employee 是否为 null 如果不是null将 对Employee属额字段进行验证
+
+	** 验证方法返回值
+
+		在方法上标注约束注解即可
+
+		@NotNull
+		public List<Employee> getAllEmployees();
+		// 通常返回值的状态由用户输入来驱动，一个返回值约束表示了一个实现的问题，这种问题应该在代码中解决而不是交给用户，所以没有 message code
+
+	** 表示一个类是否适用于方法验证
+		定义好接口的方法验证约束后，接下来要告诉Spring的MethodValidationPostProcessor 在执行方法时应用验证，这里有几种选项
+
+			-> 使用标准的@ValidateInExecution 
+				更多细粒度，可以在接口和每个方法上标注
+				不能在方法参数上用
+				想指定验证组的时候要在类上使用 @GroupSequence 和 @ValidateOnExecution
+
+			-> Spring的 @Validated
+				只可以用在类或接口上，可以在方法参数上用
+				可以直接指定验证组，还可以为同一个Controller中的不同方法指定不同的的验证组，上述那个则不行
+				这个用法更加简单
+				
+				@Validated({Default.class, Group1.class})
+				public interface EmployeeService{
+					...
+				}
+
+72 在Controller中使用参数验证
+	
+	/*
+		表单参数上标注了@Valid，它将告诉Spring在执行方法之前验证EmployeeForm
+
+		因为有参数Error在，如果验证不通过验证错误将会封装在该类中
+	*/
+	@RequestMapping(...)
+	public ModelAndView crearteEmployee(Map<String, 
+	Object> model, @Valid employeeForm, Errors errors) {
+		if(errors.hasErrors()) {
+			model.put
+		}
+
+
+		....
+		try{
+			// 因为Service也标注了类约束注解，所以也会验证
+			this.employeeService.saveEmployee(employee);
+		}catch(ConstrainViolationException e) {
+			model.put("validationErrors", e.getContrainViolations());
+		}
+	}
+
+73 为用户显示验证错误
+	判断Session是否有错误
+	对于字段，使用 <form:errors>
+	<form:errors path="firstName" cssClass="errors"/>
+
+
+74 编写自定义的约束
+	
+	** 在自定义限制中继承其它限制
+		注解是不能继承的,不过约束注解通常包含了一个 ElementType.ANNOTATION_TYPE，在定位到约束注解时，Validator 将决定注解定义上是否标注了任何其它限制。
+		如果有，将把额外限制和原始限制中定义的逻辑合并成一个复合限制
+		于是在这种情况下，约束继承了它被标注的的所有限制。
+		如果想要这种方式失效，那么需要在定义中忽略 ElementType.ANNOTATION_TYPE
+
+		// 表示可以应用注解的地方，该值很标准，大多数约束都是这样的
+		@Target({ElementType.METHOD, ElementType.FIELD, ElemetType.ANNOTATION_TYPE, ElementType.CONSTRUCTOR, ElementType.PARAMETER})
+		// 表示注解必须保留到运行时，否则, Bean验证将无法监测到它。
+		@Retention(RetentionPolicy.RUNTIME)
+		// 该注解的目标 Javadoc 应该显示它的存在，在IDE编程中会有便利的提示
+		@Documented
+		// 必需的，表示当前注解是一个 Bean验证约束
+		@Constraint(validateBy = {})
+		// 写上一个內建的约束相当于继承其功能
+		@Pattern(regexp="........")
+		// 表示复合的约束应该被认为是一个约束，应该使用 @Email,即本约束的消息来代替@Pattern的消息,大多数情况下都应该有这个属性
+		@ReportAsSingleViolation
+		public @interface Email{
+			// 下面这些都是约束都有的内容
+			String message() default "com.frank.validation.Email.message";
+
+			Class<?>[] groups[] default [];
+
+			Class<? extends Payload> payload() default();
+
+			@Target({ElementType.METHOD, ElementType.FIELD, ElemetType.ANNOTATION_TYPE, ElementType.CONSTRUCTOR, ElementType.PARAMETER})
+			@Retention(RetentionPolicy.RUNTIME)
+			@Documented
+			static @interface List {
+				Email() value();
+			}
+		}
+
+	** 创建约束验证器
+
+		@Target({ElementType.METHOD, ElementType.FIELD, ElemetType.ANNOTATION_TYPE, ElementType.CONSTRUCTOR, ElementType.PARAMETER})
+		@Retention(RetentionPolicy.RUNTIME)
+		@Documented
+		@Constraint(validateBy = {})
+		@NotNull
+		@ReportAsSingleViolation
+		public @interface NotBlank{
+			// 下面这些都是约束都有的内容
+			String message() default "com.frank.validation.NotBlank.message";
+
+			Class<?>[] groups[] default [];
+
+			Class<? extends Payload> payload() default();
+
+			@Target({ElementType.METHOD, ElementType.FIELD, ElemetType.ANNOTATION_TYPE, ElementType.CONSTRUCTOR, ElementType.PARAMETER})
+			@Retention(RetentionPolicy.RUNTIME)
+			@Documented
+			static @interface List {
+				NotBlank() value();
+			}
+		}
+		该注解需要验证空白字符串，因此需要一个 ConstraintValidator 测试值是否为空白
+
+		public class NotBlankValidator implements ConstraintValidator<NotBlank, charSequence> {
+			@Override
+			public void initialize(NotBlank annotation) {
+
+			}
+
+			@Override
+			public boolean isValid(CharSequence value, ConstraintValidatorContext context) {
+				if(value instanceof String) {
+					return ((String) value).trim().length() > 0;
+				}
+
+				return value.toString().trim().length() > 0
+			}
+		}
+
+	** 了解约束验证器的生命周期
+
+		-> Validator 遇到字段，参数或其它标注的约束注解时，首先会检查该约束上是否有别的约束注解，如果有，将首先处理这些约束限制
+
+		-> 接下来，Validator将检查约束是否有任何已定义的 ConstraintValidator。如果没有，它将查找与目标类型最匹配的 ConstraintValidator。
+
+		该约束将被两个验证器验证
+		@Constraint(validatedBy = {IntValidator.class, StringValidator.class})
+		
+		-> Validator找到匹配的ConstraintValidator之后，它将实例化并调用其 initialize方法。该方法会在每次使用约束时调用
+		假设一个类有10个字段，其中有5个使用了约束，那么该约束就会被实例化5次。这些实例将被缓存和重用,对于指定的字段来说每次使用的都是同样的实例。
+		initialize 将使代码可以从一个用于特定目的注解实例中获得值(例如@Size 注解的 min 和 max特性)。
+		通过这种方式，可以决定约束如何只验证目标值一次，使 isValid 的执行更加高效
+
+		-> initialize 方法返回之后， Validator 才会调用 isValid， 之后依次在每个字段，参数或其它目标上调用isValid验证它们是否合法
+
+		通过以上方法可以创建一些很复杂的约束，具体参考 Hibernate Validator 参考文档和JSR 349规范
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,157 @@
+1 git add
+2 git commit
+3 git status
+4 git reset HEAD 
+	-> 可以恢复文件到某个版本
+	-> 修改了文件又提交到暂存区的可以用这个丢弃暂存区的修改
+
+5 git diff HEAD -- 文件名 查看工作区和版本库里最新版本的区别
+6 git checkout == 文件名 撤销工作区的修改
+	-> 修改后还没放到暂存区，执行命令后，撤销修改就和回到版本库一模一样的状态
+	-> 已经添加到暂存区后又修改了的。撤销修改就回到添加到暂存区后的状态。
+
+7 git rm
+	-> 用git rm 文件名 可以从版本库里删掉文件，确认无误后要 git commit
+	-> 如果删错了，可以用 git checkout 还原，用版本库里的版本替换工作区的版本
+
+8 git push 把本地库的内容推送到远程
+	-u 参数 Git 不但会把本地的master分支内容推送到远程新的master分支，还会把本地的master分支和远程的master分支关联起来，以后的推送或者拉取时就可以简化命令
+
+9 git checkout -b 分知名 场景分支并切换分支
+	相当于 git branch dev
+			git checkout dev
+10 git branch 查看所有分支并标明当前分支
+
+11 git merge 分支名 将dev分支的工作成果合并
+
+12 git branch -d dev 删除dev分支
+
+13 git stash 可以将当前工作现场储藏起来，等以后恢复现场后继续工作
+
+14 git stash list 可以查看存储的工作现场
+
+15 恢复工作现场
+	git stash apply 恢复，但是 satsh内容并不删除，需要用
+	git stash drop来删除
+
+	git stash pop 恢复，同时删除 stash内容
+
+16 分支还没有合并就要去删除的时候会收到失败警告，要强行删除的话
+ git branch -D 分支名
+
+17 查看远程仓库的信息
+git remote( -v 显示更详细的信息)
+
+18 推送分支，
+$ git push 远程分支名(origin) 本地分支名(master)
+
+一般来说 master要时刻和远程同步
+	dev 是开发分支，因此也要同步
+
+19 如何别人的最新提交和自己试图推送的提交有冲突，就需要 git pull把别人的提交从origin/dev 抓下来，然后在本地合并，解决冲突再推送
+
+git pull 失败的话可能是没有指定本地 dev 分支和远程 origin/dev 分支的连接
+
+$ git branch --set--upstream (本地)dev （远程）origin/dev
+之后再pull
+
+20 打标签
+	切换到需要打标签的分支上：
+	git checkout master
+
+	之后
+	git tag 名字 就可以打一个标签
+
+	$git tag 可以查看所有标签
+
+	** 可以找到历史提交的 commit Id 然后打上标签即可
+
+		git log --pretty=oneline --abbrev-commit(查看commit id)
+
+		然后打标签
+		git tag v0.9 6224937(commitid)
+
+	**	标签是按字母顺序排序的
+	** -a 指定标签名 -m指定说明文字
+		git tag -av0.1 -m "version 0.1 released" 3628164
+
+	** 可以用 -s 用私钥签名一个标签
+		git tag -s v0.2 -m "signed verssion..." fac145a
+		签名必须安装gpg
+
+	** 删除标签 -d
+	git tag -d v0.1
+
+	** 创建的标签都只存储在本地，不会自动推送到远程。所以，打错的标签可以在本地安全删除。
+
+	** 要推送标签去远程
+	git push origin v1.0
+
+	一次推送全部未推送到远程的本地标签
+	git push origin --tags
+
+	** 如果标签已经推送到远程，要删除就麻烦一点，现从被动删除
+	再从远程删除
+	git push origin: refs/tags/v0.9
+
+11 概念解释
+	** 工作区：电脑里能看到的目录，比如c:/workspace
+
+	** 版本库(Repository)
+		工作区的 .git文件就是
+		** 版本库里存了很多东西，最重要的就是 stage(暂存区)
+
+		** 添加文件的时候，都是分两步
+			-> git add 添加到暂存区
+			-> git commit 将暂存区的所有内容都提交到当前分支
+
+		** 创建 git 版本库的时候，git自动为我们创建了唯一一个master分支，所以，commit就是往master分支上提交更改
+
+12 分支
+	Git里面，存在一条主时间线，也就是主分支，master分支
+	HEAD 严格来说不是指向提交，而是指向master，所以HEAD的就是
+	当前分支。
+
+	当创建一个新的分支的时候，git就会新建一个指针 dev，指向 master 相同的提交，
+	再把HEAD指向dev，就表示当前分支在 dev上
+	之后，对工作区的修改和提交就是针对dev分支了
+	如果工作完成了，就可以直接把 master 指向 dev的当前提交，就完成了合并
+
+	合并完成后，甚至可以删除 dev分支。
+
+13 分支策略
+	实际开发中，应遵循以下原则
+		** master分支应该是非常稳定的，仅用来发布新版本
+		** 干活都在dev分支上，版本发布的时候，再把dev合并到 master上
+
+		所有人都在dev分支上干活，每个人都有自己的分支，再往ddev上合并就好了
+
+14 多人协作的工作模式通常是
+	-> git push origin branch-name 推送自己的修改
+	-> 推送失败的话，可能远程的比较新，需要先用 git pull 试图合并
+	-> 合并有冲突就合并冲突，并在本地提交
+	-> 没有冲突或者解决掉之后，再推送
+
+15 标签相当于版本库的快照，指向某个 commit的指针，名字可以自己取
+
+16 可以在 Git工作目录下创建一个 .gitignore 的文件，把要忽略的文件名放进去即可
+
+https://github.com/github/gitignore 配置文件写法参考
+当前要把 .gitignore 文件提交一下
+
+要提交文件却提交不了的时候， -f 可以强制提交
+git add -f App.calss
+
+先检查是哪个规则忽略了本次提交
+ git -check-ignore -v App.class
+
+ 17 配置命令的别名
+
+ git config --global alias st status
+ 就把 status 换成了 st
+ 该命令对电脑下的所有git仓库都有用
+
+ 每个仓库的配置文件都放在 .git/config 文件中
+
+ 别名在 [alias] 后面，要删除别名，直接把对应的行
+ 删掉即可

@@ -1,0 +1,521 @@
+
+                               查询
+
+一 基本操作
+1,select * from 表:查询表的所有行列
+2，select employee_id,last_name,email from employees;查询表中指定的列
+
+关键字 select 标识 选择哪些列
+       from 标识从哪个表选择
+
+ 注意：SQL对大小写不敏感
+       可以写一行或者多行
+       关键字不能被缩写或者分行
+       各子句一般分行写，然后缩进提高可读性
+3 number的是数字，date的是日期，这两个可以进行数学运算
+select last_name,salary,12*salary+1000 from employees;
+
+4 sysdate表示系统日期，日期不能乘除
+
+5 空值是不存在的，无效的或者不可预知的，不是空格或者0
+   凡是空值参与的运算，结果都为空
+
+6 可以给列起别名，比如
+select employee_id id,last_name as name,12*salary ""annual_salary"
+from employees 直接在列后面空格或者as 然后起别名，或者双引号包括别名，被双引号的字符会保持原来的大小写
+
+7 连接符 把列与列，列与字符连接在一起 || 可以用来合成列 比如
+select last_name||'`s job_id is '||job_id 谁的工作是什么
+from employees
+
+8 单引号表明字符串
+
+9 默认情况下 查询会返回全部行，包括重复行 distinct 可以删去重复行
+select distinct department_id from employees;
+distinct前后的表达式结果要一致
+
+ 
+
+二 过滤和排序
+
+1 过滤关键字 where
+
+select employee_id,last_name,salary
+from employees
+where salary >5000 查询工资大于5000的人
+
+where department_id = 90 在90号部门工作的人
+
+2 字符和日期要包含在单引号内
+ 字符大小写敏感，日期格式敏感
+ 默认的日期格式为DD-MON月-RR。
+ where hire_date = '7-6月-1994'
+
+ 3 赋值符号 := 不等于 !=或者<>
+
+ 4 其它比较运算符
+betweed...and....
+ where salary between 4000 and 7000 在两个之间 包含4000和7000
+
+in
+where department_id in(70,80,90) 在70,80,90部门工作的人
+
+like
+select last_name,department_id,salary
+from employees
+--员工中名字含有字符a的员工有哪些
+where last_name like'%a%'  % 表示0到无穷大
+--员工中名字的第二位字符是a的员工有哪些
+where last_name like'_a%' —一个下划线表示一个字符
+--员工名字中含有_的员工有哪些
+where last_name like'%\_%' escape'\'      escape表示\是转义字符，之后转义_让它成为一个单纯的字符
+
+is null
+where commission_pct is null
+where commission_pct is not null查找空值或者不是空值
+
+逻辑运算
+AND 逻辑并
+OR 逻辑或
+NOT 逻辑否
+
+排序 oeder by 关键字
+desc 升序
+
+select last_name,department_id,salary,commission_pct
+from employees
+where department_id = 80 
+order by salary desc 可以不要where语句直接写这个
+
+asc 降序
+order by salary desc，last_name asc 先按工资高低排序，遇到一样的再按照名字排序
+
+排序的时候可以使用别名
+
+
+where to_char(hire_date,'yyyy-mm-dd')between'1998-02-01' and '1998-05-01'   这个时间段入职的员工的筛选条件
+
+ where to_char(hire_date,'yyyy')=1994 1994年的员工的筛选条件
+
+
+
+ 三 单行函数 
+ 
+ 1  大小写控制
+
+ select lower('ATGUIGUJAVA'),upper('AtGuiGu Java') ,initcap('AtGuiGu java')
+
+lower 全部转换小写 upper 全部转换为大写 ，initcap 只有首字母大写
+
+2 字符控制函数
+
+concat('hello','world')  helloworld 将字符连接在一起
+
+substr('helloworld',1,5) hello 取字符的子串，含头尾 从1开始输出5个字符，并非1到5
+
+length('helloworld') 10 取字符串长度
+
+instr('helloworld','w') 6 判断字符首次出现的位置 若没有出现返回0
+
+lpad(salary,10,'*') *****24000 左对齐       
+    select employee_id,last_name,lpad(salary,10,'*')  让工资左对齐，不足的位数补*
+
+rpad(salary,10,'*') 24000***** 右对齐
+
+
+trim('h'from'hellowood')  elloworld 将一个字符从一个字符串中移除 只能移除首尾的字符
+
+replace('abcd','b','m') amcd 用一个字符取代字符串中的所有指定字符
+
+ 
+3 数字函数
+
+round 四舍五入
+ROUND(435.45,2)  435.45 保留2位小数
+ROUND(435.45)    435  保留整数
+ROUND(435.45,-2) 400 保留到十位
+
+trunc 截断
+TRUNC(435.45,1)   435.4 保留一位小数
+TRUNC(435.45)     435   保留整数
+TRUNC(435.45,-2)  430   保留到十位
+
+mod 求余数
+MOD(1100,100)  0 
+
+4 日期函数 日期型数据实际含有2个值 一个日期一个时间
+sysdate 返回日期和时间
+
+在日期上加上或减去一个数字结果仍为日期
+select sysdate,sysdate+1,sysdate-3
+
+两个日期相减返回日期之间相差的天数（两个日期之间不做加法，没有意义）
+select employee_id,last_name,sysdate-hire_date worked_day 员工至今为止工作了多少天
+
+可以用数字除24来向日期中加上或减去天数
+
+select employee_id,last_name,trunc(sysdate-hire_date) worked_days
+from employees  员工工作了多少天
+
+months_between  两个日期相差的月数
+select employee_id,last_name,months_between(sysdate,hire_date)
+from employees
+
+add_months 当前日期加入或减去几个月
+next_day 下一个星期几是几号
+select add_months(sysdate,2),add_months(sysdate,-3),next_day(sysdate,'星期日')
+from dual 加上2个月 减去三个月 下个星期天是几号
+
+last_name 当前日期所在月的最后一天
+select last_name,hire_date
+from employees
+where hire_date = last_day(hire_date)-1  判断哪个员工的入职日该月的倒数第二天
+
+select round(sysdate,'month'),round(sysdate,'mm'),trunc(sysdate,'hh')
+from dual  按照指定的月数或者年 小时 秒 来四舍五入或者截断
+
+5 转换函数
+  隐式数据类型转换：Orcale自动会完成的转换
+     varchar2 or char = number
+     varchar2 or char = date
+     number = varchar2
+     date = varchar2
+     也就是varchar2 date 和number三者间可以自由转换
+ 
+  显式数据类型转换
+  to_date
+  to_number
+  to_char
+
+  where to_char(hire_date,'yyyy-mm-dd')='1994-06-07' 这样写在开发中常见
+  where to_date('1994-06-07','yyyy-mm-dd')= hire_date 跟上面这句效果一致
+  where to_char(hire_date,'yyyy"年"mm"月"dd"日"')='1994年06月07日'
+
+  to_char函数中常用的格式
+  9 数字
+  0 0
+  $ 美元符号
+  L 本地货币符号
+  . 小数点
+  , 千位符
+
+
+select to_number('￥001,234,567.89','l000,000,999.99')  1234567.89
+
+6 通用函数 适用于任何数据类型，同时也适用于空值
+nvl(expr1,expr2) 将空值转换成一个已知的值
+select employee_id,last_name,salary*12*(1+nvl(commission_pct,0)) 若commission为空，则将其赋值为0参与运算
+select last_name,nvl(to_char(department_id,'99999'),'没有部门')先将department_id转换为'99999'格式的char类型，再去判断
+
+nvl2(expr1,expr2,expr3) 当exprt1不为null时，返回expr2;为空时，返回expr3
+select last_name,commission_pct,nvl2(commission_pct,commission_pct+0.015,0.01)
+奖金为空，就输出0.01，不为空，则加上0.015输出
+
+nullif(expr1,expr2) 相等返回null,不等返回expr1
+
+coalesce函数
+与nvl相比优点在于coalesce可以同时处理交替的多个值
+如果第一个表达式为空，则返回下一个表达式，对其它的参数进行coalesce
+
+7 条件表达式
+使用if-then-else逻辑时
+
+有两种方法
+
+-case 表达式
+
+case expr when a then b
+     [when c then d
+      when e then f
+      else g]
+end   
+当员工部门是10时打印1.1倍工资
+当员工部门是20时打印1.2倍工资
+当员工部门是30时打印1.3倍工资
+
+select employee_id,last_name,department_id,
+case department_id when 10 then salary*1.1
+when 20 then salary*1.2
+else salary*1.3 end as new_salary
+from employees
+where department_id in(10,20,30)
+
+
+
+-decode 函数 上面这个例子改成decode的话
+
+select employee_id,last_name,department_id,
+decode(department_id,10,salary*1.1,
+                     20,salary*1.2,
+                     salary*1.3) as new_salary
+from employees
+where department_id in(10,20,30)
+
+四 多表查询
+
+当 省略连接条件
+   连接条件无效
+   所有表中的所有行互相连接
+时，会产生错误的笛卡尔集，可以再where中加入有效的连接条件来防止这一错误
+
+select employees.employee_id,employees.department_id,
+departments.department_name
+from employees,departments
+where employees.department_id = departments.department_id 这样可以正确过滤
+这是等值连接 多个表中有内容相同的列
+
+可以通过起别名的方法简化，并将每个表中独有的一览的限定表名去掉
+select employee_id,e.department_id,
+department_name
+from employees e,departments d
+where e.department_id = d.department_id
+
+非等值连接，多个表中没有相同的列
+select employee_id,last_name,salary,grade_level
+from employees e,job_grades j
+where e.salary between j.lowest_sal and j.highest_sal 查询E表中的工资反映在j表中
+                                                      是啥等级
+
+外连接
+--左外连接
+select e.employee_id,e.department_id,
+d.department_name
+from employees e,departments d
+where e.department_id = d.department_id(+)  (+)加在右表处即为左外连接，
+                                            会返回左表中不符合条件的结果
+--右外连接
+select e.employee_id,e.department_id,
+d.department_name
+from employees e,departments d
+where e.department_id(+) = d.department_id 与上相反
+
+不允许左右都有外连接符号
+
+cross join 也会产生笛卡尔集，是错误的
+
+自然连接
+select employee_id,department_id,department_name
+from employees natural join departments 这种方式会筛选所有条件，如果有多个相等的列
+                                        就会缩小结果范围
+
+select employee_id,department_id,department_name
+from employees join departments
+using(department_id) 这种写法就限定了连接条件 使用这种连接方法的话列的名字和数据类型得一致
+
+select employee_id,d.department_id,department_name
+from employees e join departments d
+on e.department_id = d.department_id(+) 这种写法比较好
+
+select employee_id,d.department_id,department_name,city
+from employees e join departments d
+on e.department_id = d.department_id(+)
+join locations l
+on d.location_id = l.location_id  三个表的连接的写法
+
+select employee_id,d.department_id,department_name
+from employees e left outer join departments d      left outer 和 right outer 和 full outer表示左右外连接和满外连接
+on e.department_id = d.department_id
+
+自连接
+--查询公司中员工“chen”的manager的信息
+select last_name,manager_id
+from employees
+where lower(last_name) = 'chen' 
+
+select emp.last_name,manager.last_name,manager.salary,manager.email
+from employees emp,employees manager
+where emp.manager_id = manager.employee_id 
+and lower(emp.last_name)='chen'
+
+select e1.last_name employees,e1.employee_id emp,
+e2.last_name manager,e2.manager_id mgr
+from employees e1,employees e2
+where e2.manager_id = e1.employee_id  e1和e2只是虚构的表名
+
+
+练习
+select to_char(sysdate,'yyyy"年"mm"月"dd"日"hh:mi:ss ')
+from dual
+
+五 分组函数
+avg 求平均数 只能用Number 计算时忽略空值
+
+max
+min  这两个可以用任何数据类型
+
+sum 求和 只能有number 计算时忽略空值
+count 返回表中纪录总数，可用任何数据类型 计算时忽略空值
+select count(1),count(2),count(*)结果都是一样
+
+count(distinct expr)返回expr非空且不重复的纪录总数
+
+分组数据
+
+--求各个部门的平均工资
+select department_id,avg(salary)
+from employees
+where department_id in(40,60,80)
+group by department_id  group by 让数据根据什么来分组
+
+查询中凡是不是组函数的列，都应该出现在group by后面
+select department_id,job_id,avg(salary)
+from employees
+where department_id in(40,60,80)
+group by department_id,job_id 反推不成立
+
+组函数不能再where子句中使用
+可以再having中使用组函数
+
+--求出平均工资大于6000的部分以及其平均工资
+select department_id,avg(salary)
+from employees
+having avg(salary)>6000
+group by department_id 除了有组函数时用外，having和where没啥区别
+
+练习
+--查询所有部门的名字，location_id,员工数量和工资平均值
+select department_name,location_id,count(employee_id),avg(salary)
+from employees e right outer join departments d 因为可能有的部门没有人，所有使用右连接
+on e.department_id = d.department_id
+group by department_name,location_id
+
+--查询在1995到1998年间，每年雇佣的人数
+select count(*) "total",
+       count(decode(to_char(hire_date,'yyyy'),'1995',1,null))"1995"  //转换年份字符，若为1995，则值为1，让count加起来
+       from employees
+       where to_char(hire_date,'yyyy')in('1995','1996','1997','1998')
+                                      between '1995' and '1998'也可以这样写
+
+第六节 子查询
+--谁的工资比abel高？
+select last_name,salary
+from employees
+where salary>(select salary
+              from employees
+              where last_name = 'Abel') 像这样，用括号先把先决查询查了
+
+单行子查询 = > >= < <=  <>
+
+--返回job_id与141号员工相同，salary比143号员工多的员工姓名,job_id和工资
+select last_name,job_id,salary
+from employees
+where job_id = (
+                 select job_id
+                 from employees
+                 where employee_id = 141
+               )
+and salary>   (
+                select salary
+                from employees
+                where employee_id = 143
+              )
+
+多行子查询使用单行查询符
+
+多行子查询
+in 等于列表中的任意一个
+any 和子查询返回的某一个值相比较
+all 和子查询返回的所有制比较
+
+--返回其它部门中比job_id为IT_PROG部门任一工资低的员工的
+--员工号，姓名，job_id和salary
+
+select employee_id ,last_name,job_id,salary
+from employees
+where job_id <> 'IT_PROG' and salary< any(
+                                           select salary
+                                           from employees
+                                           where job_id = 'IT_PROG'
+
+                                          )
+多行查询若有空值，也不会出现查询结果
+
+练习
+--查询平均工资最低的部门信息
+--查询平均工资最低的部门信息
+select * //表示所有信息
+from departments
+where department_id=(select department_id
+                     from employees
+                     having avg(salary) = (select min(avg(salary))
+                                           from employees
+                                           group by department_id)
+                     group by department_id)      要注意每个非使用组函数的列都要被group by
+
+
+--查询平均工资最低的部门信息和该部门的平均工资
+select d.*,(select avg(salary)from employees where department_id = d.department_id)
+from departments d   建立departmnets表和employees表的连接，
+where department_id=(select department_id
+                     from employees
+                     having avg(salary) = (select min(avg(salary))
+                                           from employees
+                                           group by department_id)
+                     group by department_id)
+
+从job表中返回对应的job_id的信息
+select *
+from jobs
+where job_id in (
+                 select job_id
+                 from employees
+                 having avg(salary)=(
+                                      select max(avg(salary))
+                                      from employees
+                                      group by job_id
+                                      
+                                    )
+                 group by job_id
+               )
+
+
+--各个部门中最高工资中最低的那个部门的最低工资是多少
+select min(salary)
+from employees
+where department_id=(
+                      select department_id
+                      from employees
+                      having max(salary)= (
+                                           select min(max(salary))
+                                           from employees
+                                           group by department_id
+                                          )
+                      group by department_id
+                    )
+
+查询平均工资最高的部门的manager的id
+select distinct manager_id
+from employees
+where department_id=(
+                     select department_id
+                     from employees
+                     group by department_id
+                     having avg(salary)=(
+                                         select max(avg(salary))
+                                         from employees
+                                         group by department_id
+                                         ) 
+                    )
+
+查询1999年来的员工中工资最高的人的信息
+select *
+from employees
+where salary = (
+                  select max(salary)
+                  from employees
+                  where to_char(hire_date,'yyyy')='1999'
+               )
+and to_char(hire_date,'yyyy')='1999'
+
+
+查询各部门中工资比本部门平均工资高的员工的员工号，姓名和工资
+select employee_id ,last_name,salary
+from employees e1
+where salary>(
+              select avg(salary)
+              from employees e2
+              where e1.department_id = e2.department_id 建立内外层的连接
+              group by department_id
+             )
+                
+                          
