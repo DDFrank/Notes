@@ -50,6 +50,7 @@ listeners.starting();
 ```
 
 ### prepareEnvironment：准备运行时环境
+此时并没有加载配置参数
 ```java
 ApplicationArguments applicationArguments = new DefaultApplicationArguments(args);
 ConfigurableEnvironment environment = prepareEnvironment(listeners, applicationArguments);
@@ -67,7 +68,7 @@ private ConfigurableEnvironment prepareEnvironment(SpringApplicationRunListeners
     // 【回调】SpringApplicationRunListener的environmentPrepared方法（Environment构建完成，但在创建ApplicationContext之前）
     // 执行回调Listener，发布事件
     listeners.environmentPrepared(environment);
-    //环境与应用绑定, 非常复杂，不知道是干啥的 TODO
+    //TODO 环境与应用绑定, 非常复杂，不知道是干啥的
     // 大概是把配置内容绑定到指定的属性配置类上
     bindToSpringApplication(environment);
     if (!this.isCustomEnvironment) {
@@ -78,3 +79,64 @@ private ConfigurableEnvironment prepareEnvironment(SpringApplicationRunListeners
     return environment;
 }
 ```
+
+### 设置系统参数，打印Beanner
+```java
+// 设置系统参数
+// 设置 spring.beaninfo.ignore 参数，默认值 true， 是否打印banner
+configureIgnoreBeanInfo(environment);
+// 打印Beanner
+// banner 的过程不是很重要，略过
+Banner printedBanner = printBanner(environment);
+```
+
+### 创建IOC容器
+```java
+// 主要也是根据Web容器类型来决定新建什么类型的IOC容器
+// Default => AnnotationConfigApplicationContext
+// Servlet => AnnotationConfigServletWebServerApplicationContext
+// Reactive => AnnotationConfigReactiveWebServerApplicationContext
+// 这里m默认的Bean工厂是 DefaultListableBeanFactory
+context = createApplicationContext();
+```
+
+### 初始化异常报告器
+```java
+exceptionReporters = getSpringFactoriesInstances(SpringBootExceptionReporter.class,
+                new Class[] { ConfigurableApplicationContext.class }, context);
+```
+
+### 初始化IOC容器
+```java
+// IOC容器，运行时环境, SpringApplicationRunListeners, 程序参数, 打印的Banner
+// 详见专门章节, 主要是注册 BeanDefinition的
+prepareContext(context, environment, listeners, applicationArguments, printedBanner);
+```
+
+### 刷新容器-BeanFactory的预处理
+```java
+refreshContext(context);
+
+
+private void refreshContext(ConfigurableApplicationContext context) {
+		refresh(context);
+    // 注册JVM关闭时调用的钩子
+		if (this.registerShutdownHook) {
+			try {
+        // 比如在JVM关闭时关闭数据库连接
+				context.registerShutdownHook();
+			}
+			catch (AccessControlException ex) {
+				// Not allowed in some environments.
+			}
+		}
+	}
+
+  // 
+  protected void refresh(ApplicationContext applicationContext) {
+		Assert.isInstanceOf(AbstractApplicationContext.class, applicationContext);
+    // 详情请见专门章节 ，how do spring refresh IOC container
+		((AbstractApplicationContext) applicationContext).refresh();
+	}
+```
+
