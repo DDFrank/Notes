@@ -83,10 +83,6 @@ git stash list
 git stash pop
 ```
 
-```
-git@github.com/DDFrank/Notes.git
-```
-
 
 
 
