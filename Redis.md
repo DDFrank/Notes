@@ -320,7 +320,7 @@ Redis 的底层优化机制,待补完
 
 - 使用 smembers 列出所有元素
 - 使用 scard 获取集合长度
-- 使用 srandmember 获取随机count个元素,默认为1
+- 使用 srandmember 获取随机count个元素,默认为1, 不会删除元素
 
 ```shell
 127.0.0.1:6379> sadd ireader go java python
