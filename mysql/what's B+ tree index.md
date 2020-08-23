@@ -93,3 +93,156 @@
 
 ## B+树索引的使用
 
+以下为表的例子
+
+```sql
+CREATE TABLE person_info(
+    id INT NOT NULL auto_increment,
+    name VARCHAR(100) NOT NULL,
+    birthday DATE NOT NULL,
+    phone_number CHAR(11) NOT NULL,
+    country varchar(100) NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_name_birthday_phone_number (name, birthday, phone_number)
+);
+```
+该表主键是 id
+有一个联合索引 (name, birthday, phone_number)
+
+### 全值匹配
+```sql
+SELECT * FROM person_info WHERE name = 'Ashburn' AND birthday = '1990-09-27' AND phone_number = '15123983239';
+```
+全部是索引列，所以 按照顺序逐步定位
+
+### 匹配左边的列
+
+```sql
+SELECT * FROM person_info WHERE birthday = '1990-09-27';
+```
+这个sql因为 birthday不是最左边开始的索引，所以利用不到索引
+
+```sql
+SELECT * FROM person_info WHERE name = 'Ashburn' AND phone_number = '15123983239';
+```
+这个只能利用到 `name` 列的索引而无法利用 `phone_number`
+
+### 匹配列前缀
+针对字符串的索引列，因为字符串列的前缀是已经排好序的
+```sql
+SELECT * FROM person_info WHERE name LIKE 'As%';
+```
+这个也可以利用到索引
+
+```sql
+SELECT * FROM person_info WHERE name LIKE '%As%';
+```
+这个就利用不到索引
+所以有时候可以安排逆序存储字符串来提高查询效率
+
+### 匹配范围值
+
+```sql
+SELECT * FROM person_info WHERE name > 'Asa' AND name < 'Barlow';
+```
+这个可以利用到索引，分别找到 `Asa` 和 `Barlow` 的记录，然后 去 `聚簇索引`中 `回表` 查询完整的用户记录
+
+如果对多个列进行范围查找的话，只有对索引最左边的那个列进行范围查找的时候才能用到 `B+` 树索引
+```sql
+SELECT * FROM person_info WHERE name > 'Asa' AND name < 'Barlow' AND birthday > '1980-01-01';
+```
+这个就只能利用到 `name` 的索引
+
+### 精确匹配某一列并范围匹配另外一列
+
+```sql
+SELECT * FROM person_info WHERE name = 'Ashburn' AND birthday > '1980-01-01' AND birthday < '2000-12-31' AND phone_number > '15100000000';
+```
+- 对 `name = ‘Ashburn’` 进行精确匹配，可以利用到索引
+- 因为 `name` 列是精确查找的，所以第一步得到的结果的 `name` 都是相同的，按照 `birthday` 排序的，所以对 `birthday` 列进行范围查找是可以利用索引的
+- 第二步中得到的 `birthday` 不是相同的，因此无法利用索引了
+
+### 用于排序
+- 使用 `ORDER BY` 排序的时候，有时候可能查询的结果集太大以至于不能在内存中进行排序时，可能需要借助磁盘的控件来存放中间结果。这种在内存或磁盘上排序的方式称为 `文件排序`
+- 假如 `ORDER BY` 子句中使用了索引列，那么可能省去排序的步骤，因为索引里已经排好序了，那么直接取出即可
+
+#### 使用联合索引进行排序的注意事项
+- `ORDER BY` 的子句后边的列的顺序也必须按照索引列的顺序给出, 不然就利用不了索引
+
+#### 无法利用索引进行排序的几种情况
+- ASC, DESC 混用
+如果利用索引可能还不如文件排序快
+
+- 排序列使用了复杂的表达式
+
+### 用于分组
+```sql
+SELECT name, birthday, phone_number, COUNT(*) FROM person_info GROUP BY name, birthday, phone_number
+```
+因为分组的顺序和联合索引排序的顺序一致，所以可以利用素银来分组
+
+## 回表的代价
+```sql
+SELECT * FROM person_info WHERE name > 'Asa' AND name < 'Barlow';
+```
+- 从二级索引中取出 `name` 的目录项记录, 因为排好序了，所以是`顺序I/O`
+- `回表`查询完整的用户记录, 因为主键的顺序并不确定，所以是 `随机I/O`
+- 需要回表的记录越多，使用二级索引的性能就越低，所以有些时候，假如回表的记录实在过多，可以考虑使用全表查询
+- 有 `LIMIT` 子句的语句倾向于使用 `二级索引 + 回表`
+
+### 覆盖索引
+- 为了避免 `回表` 操作带来的性能损耗，最好在查询列表里只包含索引列
+- 这种只需要用到索引的查询方式称为 `覆盖索引`
+- 排序操作也最好使用 `覆盖索引`的方式进行查询
+
+## 如何挑选索引
+
+- 只为用于搜索, 排序或分组的列创建索引
+也就是 `where` 子句, `order by` 子句 和 `group by` 子句
+
+- 考虑列的基数
+  - 列的基数是指某一列中不重复数据的个数
+  - 记录行数一定的情况下，列的基数越大，该列中的值越分散;列的基数越小，该列中的值越集中
+  - 最好为基数大的列建立索引，因为基数小的列重复的值多，排序意义不大
+
+- 索引列的类型尽量小
+  - 数据类型越小，在查询时进行的比较操作就越快
+  - 数据类型越小，索引占用的存储空间就越少，在一个数据页内就能放下更多的记录，从而减少磁盘`I/O`带来的性能损耗，也就可以缓存更多的数据页，提高读写效率
+
+## 索引字符串值的前缀
+因为存储字符串顺序对空间的要求比较大，所以可以在设置字符串索引的时候只对前几个字符进行索引
+
+```sql
+CREATE TABLE person_info(
+    name VARCHAR(100) NOT NULL,
+    birthday DATE NOT NULL,
+    phone_number CHAR(11) NOT NULL,
+    country varchar(100) NOT NULL,
+    KEY idx_name_birthday_phone_number (name(10), birthday, phone_number)
+);  
+```
+推荐在字符串存储的字符比较多的时候设置
+
+### 使用索引列前缀的时候，无法使用索引列对文件排序
+因为 `name` 列包含的信息不完整，所以只能使用文件排序
+
+## 让索引列在比较表达式中单独出现
+
+```sql
+where my_col * 2 < 4
+```
+```sql
+where my_col < 4/2
+```
+第一个 `where` 子句中的 `my_col` 列并不是以单独的列的形式出现的，所以存储引擎会依次遍历所有的记录，所以利用不了索引
+
+但是第二个子句就可以利用，因为 `my_col` 是单独列而不是表达式
+
+## 主键插入顺序
+- 主键的插入顺序如果忽大忽小，那么就更容易发生`页分裂` 和 `记录位移`，带来性能损耗
+- 假如主键值能依次递增，那么就可以避免这样的问题
+
+
+
+
+
