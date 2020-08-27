@@ -222,4 +222,203 @@ CREATE TABLE t (
   - Empty Space
   - File Trailer
 
-### 
+### `IBUF_BITMAP` 类型
+- 每个分组的第二个页面的类型都是 `IBUF_BITMAP`
+- 该类型的页是为了存储 `Change Buffer`。
+- `Change Buffer` 的内容放到后文详解
+
+### `INODE`类型和结构
+- 第一个分组的第三个页面的类型是 `INODE`
+- 该页是为了存储 记录了段的相关属性的 `INODE Entry`
+
+#### 结构
+
+| 名称                          | 中文名       | 占用空间大小(字节) | 简单描述                                   |
+| ----------------------------- | ------------ | ------------------ | ------------------------------------------ |
+| File Header                   | 文件头部     | 38                 | 页的一些通用信息                           |
+| List Node For INODE Page List | 通用链表节点 | 12                 | 存储上一个INODE页面和下一个INODE页面的指针 |
+| INODE Entry                   | 段描述信息   | 16320字节          |                                            |
+| Empty Space                   | 尚未使用空间 | 6                  | 用于页结构的填充，没啥实际意义             |
+| File Trailer                  | 文件尾部     | 8字节              | 校验页是否完整                             |
+
+`File Header` ，`Empty Space` 和 `File Trailer` 跟之前一样
+
+###### `List Node For INODE Page List` 
+
+- 一个 `INODE ENtry`结构占用192个字节，一个页面里可能存储 `85`个这样的结构
+- 因为一个表空间中可能存在超过85个段，所以可能一个 `INODE`类型的页面不足以存储所有的段对应的`INODE Entry`结构，所以需要额外的 `INODE` 类型的页面来存储
+- 所以有专门用于链接 `INODE`类型的页面的链表
+  - `SEG_INODES_FULL` 链表: 该链表中的 `INODE` 类型的页面中已经没有空闲空间来存储 `INODE Entry` 结构
+  - `SEG_INDOES_FREE`: 该链表中的 `INODE` 类型的页面中还有空闲空间来存储 `INODE Entry` 结构
+- 这2个链表的基节点就存储在 `File Space Header` 的固定位置， 也就是 `FSP_HDR` 类型的页的一个属性里
+
+## Segment Header  结构的应用
+
+- 一个索引分2个段，分别为叶子节点段和非叶子节点段，每个段都会对应一个 `INODE Entry` 结构
+- 那么如何知道某个段是对应哪个 `INOD Entry` 结构呢?
+- 记录在数据页 (`INDEX` 类型)的 `Page Header` 的 `PAGE_BTR_SEG_LEAF` 和 `PAGE_BTR_SEG_TOP` 属性里
+- 这2个属性都是对应一个较 `Segment Header` 的结构
+
+### Segment Header 的结构
+
+| 名称                             | 占用字节数 | 描述                               |
+| -------------------------------- | ---------- | ---------------------------------- |
+| `Space ID of the INODE Entry`    | 4          | INODE Entry 结构所在的表空间ID     |
+| `Page Number of the INODE ENtry` | 4          | INDOE Entry 结构所在的页面页号     |
+| `Byte Offset of the INODE Ent`   | 2          | INODE Entry 结构在该页面中的偏移量 |
+
+所以可知
+
+- `PAGE_BTR_SEG_LEAF` 记录着叶子节点段对应的 `INODE Entry`结构的地址是哪个表空间的哪个页面的哪个偏移量
+- `PAGE_BTR_SEG_TOP` 记录着非叶子节点段对应的 `INODE Entry`结构的地址是哪个表空间的哪个页面的哪个偏移量
+- 这样索引和其对应的段的关系就建立起来了
+
+
+
+# 系统表空间
+
+- 和独立表空间的结构基本类似
+- MySQL进程内只有一个系统表空间
+- 系统表空间中会额外记录一些有关整个系统信息的页面，所以会比独立表空间多一些页面来记录整个系统信息
+- 系统表空间的 `Space ID` 是 `0`
+
+## 整体结构
+
+- 系统表空间和独立表空间的前三个页面(`0`, `1`, `2`, `FSP_HDR`, `IBUF_BITMAP`, `INODE`)的类型是一致的
+- 页号为 `3` ~ `7` 的页面是系统表空间独有的
+
+| 页号 | 页面类型  | 英文描述               | 描述                          |
+| ---- | --------- | ---------------------- | ----------------------------- |
+| `3`  | `SYS`     | Insert Buffer Header   | 存储 Insert Buffer 的头部信息 |
+| `4`  | `INDEX`   | Insert Buffer Root     | 存储 `Insert Buffer` 的根页面 |
+| `5`  | `TRX_SYS` | Transction System      | 事务系统的相关信息            |
+| `6`  | `SYS`     | First Rollback Segment | 第一个回滚段的页面            |
+| `7`  | `SYS`     | Data Dictionary Header | 数据字典头部信息              |
+
+- 除了上述记录系统属性的页面外，系统表空间的 `extent 1` 和 `extent 2` 2个区，也就是 `64` ~ `191` 这128个页面被称为 `Doublewrite buffer`, 双写缓冲区
+
+## InnoDB 数据字典
+
+为了更好的管理用户数据，需要记录一些额外的元数据。为此，InnoDB引擎特意定义了一些内部系统表 (internal system table),来记录这些元数据`
+
+| 表名             | 描述                                                   |
+| ---------------- | ------------------------------------------------------ |
+| SYS_TABLES       | 整个InnoDB引擎中所有的表的信息                         |
+| SYS_COLUMNS      | 整个InnoDB引擎中所有的列的信息                         |
+| SYS_INDEXES      | 整个InnoDB引擎中所有的索引的信息                       |
+| SYS_FIELDS       | 整个InnoDB引擎中所有的索引对应的列的信息               |
+| SYS_FOREIGN      | 整个InnoDB引擎中所有的外键的信息                       |
+| SYS_FOREIGN_COLS | 整个InnoDB引擎中所有的外键对应的列的信息               |
+| SYS_TABLESPACES  | 整个InnoDB引擎中所有的表空间信息                       |
+| SYS_DATAFILES    | 整个InnoDB引擎中所有的表空间对应文件系统的文件路径信息 |
+| SYS_VIRTUAL      | 整个InnoDB引擎中所有的虚拟生成列的信息                 |
+
+`SYS_TABLES`, `SYS_COLUMNS`, `SYS_INDEXES`, `SYS_FILELDS`这四个表尤其重要，称之为基本系统表(basic system tables)
+
+### SYS_TABLES 表
+
+| 列名         | 描述                                             |
+| ------------ | ------------------------------------------------ |
+| `NAME`       | 表的名称                                         |
+| `ID`         | InnoDB存储引擎中每一个表都有一个唯一的ID         |
+| `N_COLS`     | 该表拥有的列的个数                               |
+| `TYPE`       | 表的类型，记录了一些文件格式，行格式，压缩等信息 |
+| `MIX_ID`     | 已过时，忽略                                     |
+| `MIX_LEN`    | 表的一些额外属性                                 |
+| `CLUSTER_ID` | 未使用，忽略                                     |
+| `SPACE`      | 该表所属表空间的ID                               |
+|              |                                                  |
+
+- 该表有2个索引
+  - `NAME`为主键的聚簇索引
+  - `ID`为列建立的二级索引
+
+### SYS_COLUMNS 表的列
+
+| 列名       | 描述                                                         |
+| ---------- | ------------------------------------------------------------ |
+| `TABLE_ID` | 该列所属表对应的ID                                           |
+| `POS`      | 该列在表中是第几列                                           |
+| `NAME`     | 该列的名称                                                   |
+| `MTYPE`    | main data type，主数据类型 (INT, CHAR, VARCHAR, FLOAT, DOUBLE) |
+| `PRTYPE`   | precise type, 精确数据类型，描述主数据类型的(是否允许NULL，是否允许负数) |
+| LEN        | 该列最多占用存储空间的字节数                                 |
+| PREC       | 该列的精度，不过貌似没有使用，都是0                          |
+|            |                                                              |
+
+- 只有一个聚簇索引 (`TABLE_ID, POS`)
+
+### SYS_INDEXES
+
+| 列名       | 描述                                                     |
+| ---------- | -------------------------------------------------------- |
+| `TABLE_ID` | 该索引所属表对应的ID                                     |
+| `ID`       | InnoDB存储引擎中每个索引都有一个唯一的ID                 |
+| `NAME`     | 该索引的名称                                             |
+| `N_FIELDS` | 该索引包含列的个数                                       |
+| `TYPE`     | 该索引的类型，比如聚簇索引，唯一索引，更改缓冲区的索引等 |
+| `SPACE`    | 该索引根页面所在的表空间ID                               |
+| `PAGE_NO`  | 该索引根页面所在的页面号                                 |
+|            |                                                          |
+
+- 只有一个`TABLE_ID, ID` 列为主键的聚簇索引
+
+
+
+### SYS_FIELDS表
+
+| 列名       | 描述                       |
+| ---------- | -------------------------- |
+| `INDEX_ID` | 该索引列所属的索引的ID     |
+| `POS`      | 该索引在某个索引中是第几列 |
+| `COL_NAME` | 该索引列的名称             |
+
+#### Data Dictionary Header 页面
+
+只要有了上述4个基本系统表，就意味着可以获取其它系统表以及用户定义的表的所有元数据
+
+比如:
+
+- 到 `SYS_TABLES` 表中根据表名定位到具体的记录，就可以获取到 `SYS_TABLESPACES`表的 `TABLE_ID`
+- 使用整个 `TABLE_ID` 到 `SYS_COLUMNS` 表中就可以获取到属于该表的所有列的信息。
+- 使用该 `TABLE_ID` 还可以到 `SYS_INDEXES`表中获取所有的索引的信息，索引的信息中包括对应的`INDEX_ID`，还记录着该索引对应的 `B+`树根页面是哪个表空间的哪个页面。
+- 使用 `INDEX_ID` 就可以到 `SYS_FIELDS` 表中获取所有索引列的信息。
+
+但是这4个表的`元数据`只能硬编码到代码中
+
+这个就是 页号为 `7` 的页面，也就是 类型为 `SYS` 的 `Data Dictionary Header`，也就是数据字典的头部信息
+
+| 名称                    | 中文名           | 占用空间大小(字节) | 简单描述                                                     |
+| ----------------------- | ---------------- | ------------------ | ------------------------------------------------------------ |
+| `File Header`           | 文件同步         | 38                 | 页的通用信息                                                 |
+| `Data Dictionay Header` | 数据字典头部信息 | 56                 | 记录一些基本系统表的根页面位置以及InnoDB存储引擎的一些全局信息 |
+| `Segment Header`        | 段头部信息       | 10                 | 记录本页面所在段对应的INODE Entry 位置的信息                 |
+| Empty Space             | 尚未使用空间     | 16272              | 用于页结构的填充，无实际意义                                 |
+| File Trailer            | 文件尾部         | 8                  | 校验页是完整                                                 |
+
+`Segment Header`部分说明数据字典的信息也可以被视为一个段，在该段的数据信息比较少的时候，可能就只有本页一个碎片页
+
+###### Data Dictionary Header 部分的各个字段
+
+- `Max Row ID`: 全局共享的 `row_id`，无论哪个表插入时，需要 `row_id`的时候，就会自增
+- `Max Table ID`: InnoDB 存储引擎中的所有的表对应一个唯一的ID, 每次新建一个表，就会从这里取值并自增
+- `Max Index ID`: InnoDB 存储引擎中的所有的索引都对应一个唯一的ID，每次新建一个索引时，就会从这里取值并自增
+- `Max_Space_id`: InnoDB 存储引擎中的所有的表空间都对应一个唯一的ID, 每次新建一个表空间，就会从这里取值并自增
+- `Mix ID Low(Unused)`: 无用字段
+- `Root of SYS_TABLES clust index`: 本字段代表`SYS_TABLES`表聚簇索引的根页面的页号
+- `Root of SYS_TABLE_IDS sec index`: 本字段代表 `SYS_TABLES` 表为ID列建立的二级索引的根页面的页号
+- `Root of SYS_COLUMNS clust index`: 本字段代表 `SYS_COLUMNS` 表聚簇索引的根页面的页号
+- `Root of SYS_INDEXES clust index`: 本字段代表 `SYS_INDEXES` 表聚簇索引的根页面的页号
+- `Root of SYS_FIELDS clust index`: 本字段代表 `SYS_FIELDS` 表聚簇索引的根页面的页号
+- `Unused`: 这4个字节没有用处。
+
+##### information_schema系统数据库
+
+系统库 `information_schema` 中提供了一些以 `innodb_sys` 开头的库，可以查看
+
+SHOW TABLE LIKE `innodb_sys%`
+
+
+
+要注意数据是 存储引擎启动的时候读取并填充的，所以和运行时的数据可能并不一致
+
