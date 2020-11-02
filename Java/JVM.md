@@ -444,9 +444,162 @@ jstack [option] vmid
 
 - 这些数据类型又各自有自己的数据类型
 
-P170 页，补完数据类型表 TODO
+详情见下文
 
 - 可以使用 javap -verbose 参数输出 class 文件的字节码内容
+
+#### 常量池中的各个数据类型
+
+- #### CONSTANT_Integer_info、CONSTANT_Float_info
+
+分别表示 int 和 float 类型的常量
+
+```txt
+CONSTANT_Integer_info {
+    u1 tag;
+    u4 bytes;
+}
+
+CONSTANT_Float_info {
+    u1 tag;
+    u4 bytes;
+}
+
+```
+
+`boolean` `byte` `short` `char` 类型的变量，在常量池中都会被当作`int`来处理
+
+- #### CONSTANT_Long_info 和 CONSTANT_Double_info
+
+表示 `long` 和 `double` 类型的常量
+
+```txt
+CONSTANT_Long_info {
+    u1 tag;
+    u4 high_bytes;
+    u4 low_bytes;
+}
+
+CONSTANT_Double_info {
+    u1 tag;
+    u4 high_bytes;
+    u4 low_bytes;
+}
+```
+
+这2种类型会占用两个常量池的位置
+
+- #### CONSTANT_Utf8_info
+
+CONSTANT_Utf8_info 存储的是经过 MUTF-8(modified UTF-8) 编码的字符串
+
+```txt
+CONSTANT_Utf8_info {
+// 长度固定为1
+    u1 tag;
+// 表示字符串的长度
+    u2 length;
+// 长度为 length 的字节数组
+    u1 bytes[length];
+}
+```
+
+
+
+- #### CONSTANT_String_info 类型
+
+CONSTANT_String_info 用来表示 java.lang.String 类型的常量对象
+
+```txt
+CONSTANT_String_info {
+// 值为8
+    u1 tag;
+// 指向常量池的中 CONSTANT_Utf8_info， 也就是真正的字符串
+    u2 string_index;
+}
+```
+
+
+
+- #### CONSTANT_Class_info
+
+CONSTANT_Class_info 结构用来表示类或接口，它的结构与 CONSTANT_String_info 非常类似
+
+```txt
+CONSTANT_Class_info {
+    // 值为7
+    u1 tag;
+    // 表示常量池的索引，是一个 CONSTANT_Utf8_info 常量，这个字符串存储的是类或接口的全限定名
+    u2 name_index;
+}
+```
+
+
+
+- #### CONSTANT_NameAndType_info
+
+表示字段或者方法，格式有下面三部分组成
+
+```txt
+CONSTANT_NameAndType_info  {
+	// 值为12
+	u1 tag;
+	// 指向常量池中的 CONSTANT_Utf8_info，存储的是字段名或者方法名
+	name_index name_index
+	// 指向常量池中的 CONSTANT_Utf8_info，存储的是字段描述符或者方法描述符
+	descriptor_index descriptor_index
+}
+```
+
+
+
+- #### CONSTANT_Fieldref_info、CONSTANT_Methodref_info 和 CONSTANT_InterfaceMethodref_info
+
+结构比较类似
+
+```txt
+CONSTANT_Fieldref_info {
+    u1 tag;
+    u2 class_index;
+    u2 name_and_type_index;
+}
+
+CONSTANT_Methodref_info {
+	// 值为10
+    u1 tag;
+    // 指向一个 CONSTANT_Class_info 的常量池索引值
+    u2 class_index;
+    // 是一个指向 CONSTANT_NameAndType_info 的常量池索引值，表示方法的参数类型和返回值的签名
+    u2 name_and_type_index;
+}
+
+CONSTANT_InterfaceMethodref_info {
+    u1 tag;
+    u2 class_index;
+    u2 name_and_type_index;
+}
+```
+
+
+
+- #### CONSTANT_MethodType_info、CONSTANT_MethodHandle_info 和CONSTANT_InvokeDynamic_info
+
+  从 jdk 1.7 开始，为了更好的支持动态语言调用，新增了3种常量池类型
+
+  ```txt
+  CONSTANT_InvokeDynamic_info {
+  	// 值为18
+      u1 tag;
+      // 指向引导方法表 bootstrap_methods[] 数组的索引
+      u2 bootstrap_method_attr_index;
+      // 指向索引类常量池里的CONSTANT_NameAndType_info，表示方法描述符
+      u2 name_and_type_index;
+  }
+  ```
+
+  
+
+
 
 
 
@@ -921,12 +1074,40 @@ bipush, sipush, ldc, ldc_w, ldc2_w, aconst_null, iconst_ml, iconst_<i> ...
 
 ### 方法调用和返回指令
 
-- invokevirtual : 指令用于调用对象的实例方法，根据对象的实际类型进行分派（虚方法分派），也是最常见的
+- invokevirtual : 指令用于调用对象的实例方法(`public`, `protected`,`package` 的方法)，根据对象的实际类型进行分派（虚方法分派），也是最常见的
+
+动态绑定的，因为这些方法可能被重写，所以要在运行时确定
+
 - invokeinterface: 用于调用接口方法，它会在运行时搜索一个实现了这个接口方法的对象，找出适合的方法进行调用
-- invokespecial: 指令用于调用一些需要特殊处理的实例方法，包括实例初始化犯法，私有方法和父类方法
+
+
+
+- invokespecial: 指令用于调用一些需要特殊处理的实例方法，包括实例初始化方法，私有方法和父类方法
+
+属于静态绑定, 因为这三个方法都是在类加载时就已经确定的
+
 - invokestatic: 指令用于调用类方法(static 方法)
+
+要调用的方法在编译期确定，运行时不会修改，属于静态绑定
+
+`Integer.valueOf("42")`对应字节码
+
+```txt
+0: ldc           #2                  // String 42
+2: invokestatic  #3                  // Method java/lang/Integer.valueOf:(Ljava/lang/String;)Ljava/lang/Integer;
+5: pop
+```
+
+
+
 - invokedynamic 指令用于在运行时动态解析出调用点限定符所引用的方法，并执行该方法
-  - 前面的指令的分派逻辑都固化在 虚拟机内部，但是 invokedynamic 指令的分派逻辑是由用户设所设定的引导方法决定的
+  
+  - 前面的指令的分派逻辑都固化在 虚拟机内部，但是 invokedynamic 指令的分派逻辑是由用户所设定的引导方法决定的，调用流程如下
+  - JVM 首次执行 invokedynamic 调用时会调用引导方法（Bootstrap Method）
+  - 引导方法返回 CallSite 对象，CallSite 内部根据方法签名进行目标方法查找。它的 getTarget 方法返回方法句柄（MethodHandle）对象
+  - 在 CallSite 没有变化的情况下，MethodHandle 可以一直被调用，如果 CallSite 有变化的话重新查找即可。以`def add(a, b) { a + b }`为例，如果在代码中一开始使用两个 int 参数进行调用，那么极有可能后面很多次调用还会继续使用两个 int，这样就不用每次都重新选择目标方法。
+  
+  
 - 方法返回指令是根据返回值区分的
   - ireturn
   - lreturn
@@ -958,6 +1139,23 @@ bipush, sipush, ldc, ldc_w, ldc2_w, aconst_null, iconst_ml, iconst_<i> ...
   - monitorexit: 退出同步
   - 每条调用过的 monitorenter 都必须有其对应的 monitorexit 指令
   - 为了保证 方法异常完成时对应的 monitorenter 有 moniterexit 能被执行，编译器会自动产生一个异常处理器
+
+
+
+### 具体的代码对应字节码的分析
+
+#### new 一个对象的时候
+
+```txt
+// 创建一个对象并将其压入栈顶
+0: new           #2                  // class ScoreCalculator
+// 复制栈顶的对象并压入栈顶
+3: dup
+// 调用 init 也就是构造器
+4: invokespecial #3                  // Method ScoreCalculator."<init>":()V
+// 将
+7: astore_1
+```
 
 
 
