@@ -1,0 +1,36 @@
+= volatile 是怎么工作的
+
+== volatile 的特性
+* 可见性: 当一个线程修改了 *volatile* 变量的值，新值对于其他要读该变量的线程的来说是立即可见的。而普通变量是无法做到这一点的。普遍变量的值在线程间传递需要通过主内存来完成
+* 有序性: 就是被声明为 *volatile* 的变量的临界区代码的执行是有顺序的，即禁止指令重排序
+* 受限原子性: 对于单个 *volatile* 变量的读/写操作都具有原子性，但类似于 `volatile++` 这种复合操作不具有原子性。所以 *volatile* 的原子性是受限制的。并且在多线程环境中，*volatile* 并不能保证原子性
+
+=== 如何保证 volatile 可见性
+
+假设有如下代码:
+
+[source, java]
+----
+// instance 是 volatile 变量
+instance = new Instance()
+----
+
+转换为汇编代码的话变成这样 增加带 *lock* 的指令
+
+*lock* 指令在多核处理器下会引发两件事
+
+* 将当前处理器缓存行的数据写回到系统内存
+* 这个写内存的操作会使在其它CPU里缓存了该内存地址的数据无效
+
+=== 如何保证 volatile 有序性
+通过加 *内存屏障* 的方式来限制指令重排序，有以下4种方式
+
+* 在每个 volatile 写操作的前面插入一个 StoreStore 屏障，防止写volatile与后面的写操作重排序
+
+* 在每个volatile写操作的后面插入一个StoreLoad屏障，防止写volatile与后面的读操作重排序
+
+* 在每个volatile读操作的后面插入一个LoadLoad屏障，防止读volatile与后面的读操作重排序
+
+* 在每个volatile读操作的后面插入一个LoadStore屏障，防止读volatile与后面的写操作重排序
+
+

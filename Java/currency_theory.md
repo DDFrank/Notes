@@ -278,7 +278,7 @@ E-->B
 - run() 方法执行完或抛出异常而终止
 - 假如想停止一个线程，建议使用 interrupt() 而不思 stop()
 
-#### 如何安全的停止线程
+#### 如何安全的停止线程
 
 - 可以捕获 InterruptedException 异常
 - 当线程 A 处于 RUNNABLE 状态时，并且阻塞在 java.nio.channels.InterruptibleChannel 上时，如果其他线程调用线程 A 的 interrupt() 方法，线程 A 会触发 java.nio.channels.ClosedByInterruptException 这个异常；
