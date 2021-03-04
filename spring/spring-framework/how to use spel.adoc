@@ -1,0 +1,40 @@
+SpEL 是Spring提供的表达式API，可以脱离Spring独立使用，主要的功能如下
+
+* 文字表达式
+
+* 布尔和关系运算符
+
+* 正则表达式
+
+* 类表达式
+
+* 访问 properties, arrays, lists, maps
+
+* 方法调用
+
+* 关系运算符
+
+* 参数
+
+* 调用构造函数
+
+* Bean引用
+
+* 构造Array
+
+* 内嵌lists, 内嵌maps
+
+* 三元运算符
+
+* 变量
+
+* 用户定义的函数
+
+* 集合投影
+
+* 集合筛选
+
+* 模板表达式
+
+官网地址: https://docs.spring.io/spring-framework/docs/current/reference/html/core.html#expressions
+

@@ -1,0 +1,522 @@
+== 套接字类型和协议设置
+
+[source,c]
+----
+#include <sys/socket.h>
+
+// 创建套接字的函数
+int scoket(int domain, int type, int protocol);
+----
+
+== 协议族(domain)
+
+分为以下几类
+
+.Table socket domain
+|===
+|名称|协议族
+|PF_INET|IPv4互联网协议族
+|PF_INET6|IPv6互联网协议族
+|PF_LOCAL|本地通信的UNIX协议族
+|PF_PACKET|底层套接字的协议族
+|PF_IPX|IPX Novell协议族
+|===
+
+- IPv4协议族是重点
+- 套接字中实际采用的最终协议信息是通过socket函数的第三个参数传递的。在指定的协议族范围内通过第一个参数决定第三个参数。
+
+== 套接字类型
+
+- 指的是套接字的数据传输方式。
+- 决定了协议族并不能同时决定数据传输方式，所以需要该参数
+
+=== 面向连接的套接字 (SOCK_STREAM)
+`type`参数为 `SOCK_STREAM`的话，表示将创建面向连接的套接字。
+其特点为
+
+- 传输过程中数据不会消失
+- 按序传输数据
+- 传输的数据不存在数据边界(Boundary) (传输数据的计算机通过3次调用write函数传递了100字节的数据，但接收数据的计算机仅通过1次read函数调用就接收了全部100个字节)
+- 套接字连接必须一一对应
+
+TIP: 收发数据的套接字内部有缓冲(buffer)，数据将先保存到buffer。只要不超过缓冲区容量，则有可能在数据填充满缓冲后通过一次read调用读取全部数据，也有可能分成多次。因此，在面向连接的套接字中，read函数和write函数的调用次数并无太大意义
+
+所以，总结说，面向连接的套接字就是 可靠的，按序传递的，基于字节的面向连接的数据传输方式的套接字
+
+=== 面向消息的套接字(SOCK_DGRAM)
+`type`参数是 `SOCK_DGRAM`的话，将创建面向消息的套接字
+其特点如下
+
+- 强调快速传输而非传输顺序
+- 传输的数据可能丢失也可能损毁
+- 传输的数据有数据边界 (接收数据的次数应和传输次数相同)
+- 限制每次传输的数据大小
+
+所以面向消息的套接字的特性就是
+
+不可靠的，不按序传递的，以数据的高速传输为目的的套接字(没有连接的概念)
+
+== 协议的最终选择
+
+- 第三个参数决定最终采用的协议
+
+- 假如前两个参数已经能确定套接字类型，那么第三个参数传递0即可
+
+- 假如同一协议族中存在多个数据传输方式相同的协议，那么就需要该参数了
+
+TIP: IPv4协议族中面向连接的套接字，只有TCP，因此无需传递第三个参数就可以创建TCP套接字
+
+[source, c]
+----
+// TCP套接字
+int tcp_socket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)
+
+// UDP套接字
+int udp_socket = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)
+----
+
+== 地址族与数据序列
+
+=== 网络地址
+为使计算机连接到网络并收发数据，必需向其分配IP地址
+
+- IPv4 4字节地址族
+- IPv6 16字节地址族
+
+TIP: IPv4 标志的4字节IP地址分为网络地址和主机（计算机）地址，且分为 A,B,C,D,E等类型
+
+TIP: 一般不会使用已被预约了的E类地址
+
+网络地址(网络ID)是为区分网络而设置的一部分IP地址
+
+==== 网络地址分类与主机地址边界
+只需要通过IP地址的第一个字节即可判断网络地址占用的字节数，可以根据IP地址的边界区分网络地址
+
+- A类地址的首字节范围: 0 ~ 127
+- B类地址的首字节范围: 128 ~ 191
+- C类地址的首字节范围: 192 ~ 223
+
+还可以
+
+- A类地址的首位以0开始
+- B类地址的前两位以10开始
+- C类地址的前三位以110开始
+
+==== 用于区分套接字的端口号
+
+- IP用于区分计算机，只要有IP地址就能向目标主机传输数据，但仅凭这些无法传输给最终的应用程序
+
+- 计算机中一般配有NIC(Network Interface Card)数据传输设置。通过NIC向计算机内部传输数据时会用到IP。操作系统负责把传递到内部的数据适当分配给套接字，这时就要利用端口号
+- 端口号就是在同一操作系统内为区分不同套接字而设置的，因此无法将1个端口号分配给不同套接字
+- 端口号是16位，可分配的端口号范围是0-65535, 但0-1023是知名端口号，一般分配给特定应用程序
+- 虽然端口号不能重复，但是TCP套接字和UDP套接字不会共用端口，所以允许重复
+
+
+==== 地址信息的表示 
+
+===== 表示 IPv4地址的结构体
+
+[source, c]
+----
+struct sockaddr_in
+{
+    sa_family_t sin_family; // 地址族(Address Family)
+    unit16_t    sin_port; // 16位 TCP/UDP 端口号
+    struct in_addr  sin_addr; // 32位IP地址
+    char    sin_zero[8];    // 不使用
+}
+
+// 用于存放 32 位ip地址
+struct in_addr
+{
+    In_addr_t   s_addr; // 32位IPv4地址
+}
+
+----
+
+===== 结构体 socketaddr_in 的成员分析
+
+- sin_family
+每种协议族适用的地址族均不同
+
+.Table 地址族
+|===
+|地址族(Address Family)|含义
+|AF_INET|IPv4网络协议中使用的地址族
+|AF_INET6|IPv6网络协议中使用的地址族
+|AF_LOCAL|本地通信中采用的UNIX协议的地址族
+|===
+
+- sin_port
+保存16位端口号，它以网络字节序保存
+
+- sin_addr
+该成员保存32位IP地址信息，也以网络字节序保存。
+
+- sin_zero
+无特殊含义，只是为了将结构体 sockaddr_in 的大小与 sockaddr 结构体保持一致而插入的成员。必需填充为0
+
+==== 网络字节序与地址变换
+
+CPU向内存保存数据的方式有2种，所以CPU解析数据的方式也有2种
+
+- 大端序(Big Endian): 高位字节存放到地位地址
+
+- 小端序(Little Endian): 高位字节存放到高位地址
+
+- 通过网络传输数据时约定统一方式。称为网络字节序,也就是大端序
+
+===== 字节序转换 (Endian Conversions)
+
+- unsigned short htons(unsigned short)
+
+- unsigned short ntohs(unsigned short)
+
+- unsigned long htonl(unsigned long)
+
+- unsigned long htonl(unsigned long)
+
+`htons`种的h代表主机(host)字节序, `htons`中的代表的网络(network)字节序
+
+TIP: htons 转换short数据，通常用于端口号转换，htonl 则用于ip地址转换, 除了向 sockaddr_in 结构体变量填充数据时需要调用外，其它的数据收发过程时自动转换的
+
+
+=== 网络地址的初始化和分配
+
+==== 将字符串信息转换为网络字节序的整数型
+
+可以使用以下函数
+[source, c]
+----
+#include <arpa/inet.h>
+
+// 成功时返回32位大端序整数型值，失败时返回INADDR_NONE
+in_addr_t inet_addr(const char* string)
+
+// 功能上一致，但是使用了 in_addr 结构体，所以使用频率更高
+// 成功时返回1，失败时返回0
+int inet_aton(const char* string, struct in_addr* addr);
+
+
+// 传入整数型ip地址转换位字符串格式
+// 成功时返回转换的字符串地址，失败时返回-1
+// 调用完该函数后，应立即将字符串信息复制到其它内存空间，不然再次调用时，就会被覆盖
+char* inet_ntoa(struct in_addr adr);
+
+----
+
+==== 网络地址初始化
+
+[source, c]
+----
+struct sockaddr_in addr;
+// 声明ip地址字符串
+char* serv_ip = "211.217.168.13";
+// 声明端口号字符串
+char* serv_port="9190";
+// 结构体变量 addr 的所有成员初始化为0
+memset(&addr, 0, sizeof(addr));
+// 指定地址族
+addr.sin_family = AF_INET;
+// 基于字符串的IP地址初始化
+addr.sin_addr.s_addr = inet_addr(serv_ip);
+// 基于字符串的端口号初始化
+addr.sin_port = htons(atoi(serv_port));
+----
+
+==== 客户端地址初始化
+
+客户端因为要连接到服务端，所以需要声明好 `socketaddr_in` 结构体后，初始化为要与之连接的服务端套接字的IP和端口号，然后调用`connect`函数
+
+==== INADDR_ANY
+
+每次创建服务器端套接字都要输入IP地址会有些繁琐，此时可如下初始化地址信息
+
+[source, c]
+----
+struct sockaddr_in addr;
+char* serv_port = "9190";
+memset(&addr, 0, sizeof(addr));
+addr.sin_family = AF_INET;
+// 利用常数 INADDR_ANY 分配服务器端的IP地址
+addr.sin_addr.s_addr = htonl(INADDR_ANY);
+add.sin_port = htons(atoi(serv_port));
+----
+
+=== 向套接字分配网络地址
+
+[source, c]
+----
+#include <sys/socket.h>
+
+// sockfd: 要分配地址信息(IP地址和端口号)的套接字文件描述符
+// myaddr: 存有地址信息的结构体变量地址值
+// addrlen: 第二个结构体变量的长度
+int bind(int sockfd, struct sockaddr* myaddr, socklen_t addrlen)
+// 此函数调用成功时，会将第二个参数指定的地址信息分配给第一个参数中的相应套接字
+----
+
+== 通过套接字收发数据
+
+=== TCP服务器端的默认函数调用顺序
+
+- socket(): 创建套接字
+见上文
+
+- bind(): 分配套接字地址
+见上文
+
+- listen(): 等待连接请求状态
+
+[source, c]
+----
+#include <sys/socket.h>
+// sock: 希望进入等待连接请求状态的套接字文件描述符, 传递的描述符套接字参数将成为服务器端套接字(监听套接字)
+
+// backlog: 连接请求等待队列(Queue)的长度，若为5，表示最多使5个连接请求进入队列
+int listen(int sock, int backlog)
+----
+
+
+- accept(): 允许连接
+
+-- 受理客户端的请求需要套接字，但是当然不能使用上述 listen用的套接字, 使用accept函数会自动创建用于数据交换的套接字, 并连接到发起请求的客户端
+
+[source, c]
+----
+#include <sys/socket.h>
+
+// sock 服务器套接字的文件描述符
+// addr 保存发起连接请求的客户端地址信息的变量地址值，调用函数后向传递来的地址变量参数填充客户端地址信息
+// addrlen 第二个参数addr结构体的长度，但是存有长度的变量地址。函数调用完成后，该变量即被填入客户端地址长度
+int accept(int sock, struct sockaddr* addr, socklen_t* addrlen);
+// 成功时返回创建的套接字文件描述符, 失败时返回-1
+----
+
+-- accept函数受理连接请求等待队列中待处理的客户端连接请求。函数调用成功时，会产生用于数据I/O的套接字并返回其文件描述符。
+
+-- 套接字是自动创建的，并自动与发起连接请求的客户端建立连接
+
+- read()/write(): 数据交换
+
+- close(): 断开连接
+
+=== TCP客户端的函数默认调用顺序
+
+- socket(): 创建套接字
+同上文
+- connect(): 请求连接
+
+[source, c]
+----
+#include <sys/socket.h>
+
+// sock 客户端套接字文件描述符
+// 保存目标服务器端地址信息的变量地址值
+// 以字节为单位传递已传递给第二个结构体参数servaddr的地址变量长度
+int connect(int sock, struct sockaddr* servaddr, socklen_t addrlen)
+
+----
+
+客户端调用 connect 函数后，发生以下情况之一才会返回
+
+-- 服务器端接收连接请求 
+
+-- 发生断网等异常情况而中断连接请求
+
+IMPORTANT: 请求进入连接队列，而不是服务器端调用accept,因此connect函数返回后不会立即发生数据交换
+
+TIP: 客户端的套接字的地址分配是在调用 connect 时，发生在操作系统内核的，IP使用主机的IP，端口号随机
+
+
+
+
+- read() / write(): 交换数据
+
+- close(): 断开连接
+
+
+== TCP原理
+
+=== TCP套接字中的I/O缓冲
+
+- read()/write() 函数调用后并非马上接收数据，而是从缓冲区读写数据
+
+- I/O缓冲区的特性整理如下
+
+-- I/O缓冲在每个TCP套接字中单独存在
+
+-- I/O缓冲在创建套接字时自动生成
+
+-- 即使关闭套接字也会继续传递输出缓冲中遗留的数据
+
+-- 关闭套接字将丢失输入缓冲中的数据
+
+- TCP 中有滑动窗口(Sliding Window) 协议，保证不会因为缓冲区溢出而丢失数据
+
+TIP: write函数和Windows的send函数不会在完成向对方主机的数据传输时返回，而是在数据移到输出缓冲时返回。但TCP会保证对输出缓冲数据的传输
+
+=== 与对方套接字的连接
+
+套接字是以全双工(Full-duplex)方式工作的，所以它可以双向传递数据，所以在收发之前需要通过三次握手来建立连接
+
+- [SYN] SEQ: 1000, ACK:
+首先，请求连接的主机A向主机B传递上述消息
+该消息中SEQ为1000，ACK为空，SEQ1000说明
+
+现在传递的数据包序号为1000， 如果接收无误，请ack一个1001号数据包
+
+这种首次请求连接时使用的消息被称为SYN
+
+- [SYN+ACK] SEQ: 2000, ACK: 1001
+
+主机B会向主机A发送上述消息
+
+此时SEQ为2000， ACK为1001， 而SEQ为2000的含义则表明
+
+“现在传递的数据包序号为2000，如果接收无误，请ack一个2001号的数据包”
+
+ACK1001的含义如下:
+
+"刚才传输的SEQ为1000的数据不接收无误，现在可以发送 SEQ 1001 的数据包了"
+
+- [ACK] SEQ: 1001, ACK: 2001
+
+最后主机A向主机B传输上述消息, 表明:
+"已正确收到传输的SEQ为2000的数据包，现在可以传输SEQ为2001的数据包"
+
+至此，主机A和主机B确认了彼此均就绪
+
+=== 与对方主机的数据交换
+过程如下:
+
+主机A => (SEQ 1200 100 byte data) 主机B
+主机A <= (ACK 1301)主机B
+主机A => (SEQ 1301 100 byte data) 主机B
+主机A <= (ACK1402) 主机B
+
+上述过程是主机A 分2个数据包向主机B传递200字节的过程，可以看出
+
+- 主机B回复的ACK号精确到了字节数 (1200 + 100 +1 = 1301)
+
+- 主机A再收到主机B的ACK后才会发送下一个数据包，不然就进行数据重传
+
+=== 断开与套接字的连接
+
+再TCP套接字结束时，假如对方还有数据需要传输时直接断掉就会出问题，所以需要通过4次挥手来协商断开
+
+
+主机A => (FIN SEQ 5000 ACK -) 主机B (协商断开连接)
+主机A <= (ACK SEQ 7500 ACK 5001) 主机B (还有数据没发送完)
+主机A <= (FIN SEQ 7501 ACK 5001) 主机B (数据以已发送完，同意断开连接)
+主机A => (ACK SEQ 5001 ACK 7502) 主机B (数据全部发送完，连接断开)
+
+== 基于UDP的服务器端和客户端
+
+=== UDP套接字的特点
+
+- 不可靠的传输服务
+
+- 性能有时候比TCP高出很多
+
+- TCP 和 UDP 的本质区别是 TCP提供了流控制，而UDP则没有
+
+=== 实现基于UDP的服务器端/客户端
+
+- UDP中的服务器端和客户端没有连接
+
+UDP无需 TCP那样的 listen 函数 和 accept 函数。UDP中只有创建套接字的过程和数据交换过程
+
+- UDP服务器端和客户端均只需要一个套接字
+
+TCP中，套接字是一对一的关系(毕竟面向连接嘛), 若向10个客户端，则除了守门的服务器套接字外，还需要10个服务器端套接字
+
+在UDP中，服务器端和客户端都只需要1个套接字
+
+==== 基于UDP的数据I/O函数
+
+- 创建好TCP套接字后，传输数据时无需再添加地址信息，因为TCP套接字将保持与对方套接字的连接。
+
+- UDP套接字不会保持连接状态, 因此每次传输数据都需要添加目标地址信息
+
+发送数据的函数
+[source, c]
+----
+#include <sys/socket.h>
+
+// sock: 用于传输数据的UDP套接字文件描述符
+// buff: 用于保持传输数据的缓冲地址值
+/ nbytes: 待传输的数据长度，以字节为单位
+// flags: 可选项参数，若没有则传递0
+// to: 存有目标地址信息的sockaddr结构体变量的地址值
+// addrlen: 传递给参数to的地址值结构体变量长度
+ssize_t sendto(int sock, void* buff, size_t nbytes, int flags, struct sockaddr* to, socketlen_t addrlen);
+----
+
+接收数据的函数
+
+[source, c]
+----
+#include <sys/socket.h>
+
+// sock: 用于接收数据的UDP套接字文件描述符
+// buff: 保存接收数据的缓冲地址值
+// nbytes: 可接收的最大字节数，故无法超过参数buff所指的缓冲大小
+// flags: 可选项参数，若没有则传入0
+// from: 存有发送端地址信息的socketaddr结构体变量的地址值
+// addrlen: 保存参数的from的结构体变量长度的变量地址值
+ssize_t recvfrom(int sock, void* buff, size_t nbytes, int flags, struct socketaddr* from, socketlen_t* addrlen);
+----
+
+
+=== UDP客户端套接字的地址分配
+
+- 调用 sendto 函数传输数据前应完成对套接字的地址分配工作, 因此需要调用bind函数
+
+- 在调用sendto函数时发现尚未分配地址信息，则在首次调用sendto函数时给相应套接字自动分配IP和端口。IP使用主机IP，端口号使用尚未使用的任意端口号
+
+=== UDP的数据传输特性
+
+==== 存在数据边界
+
+与TCP不同，UDP是具有数据边界的协议，传输中调用I/O函数的次数非常重要，因此，输入函数的调用次数和输出函数的调用次数应该完全一致，才能保证接收全部已发送数据
+
+==== 已连接UDP套接字与未连接UDP套接字
+
+TCP套接字中需注册待传输数据的目标IP和端口号，而UDP中则无需注册
+通过sendto函数传输数据的过程有如下步骤:
+
+- 向UDP套接字注册目标IP和端口号
+
+- 传输数据
+
+- 删除UDP套接字中注册的目标地址信息
+
+每次调用sendto函数时重复上述和过程，每次都变更目标地址的话，可以重复利用同一UDP套接字向不同目标传输数据，这种未注册目标地址信息的套接字称为`未注册套接字`
+
+假如要和同一主机进行长时间通信时，可以将UDP套接字变成已连接套接字，可以提高效率 (使用 connect 函数)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

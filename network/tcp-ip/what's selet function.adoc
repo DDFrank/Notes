@@ -1,0 +1,77 @@
+== select 函数
+
+select 函数可以将多个文件描述符集中到一起统一监视， 监视的事件如下
+
+- 是否存在套接字接收数据
+
+- 无需阻塞传输数据的套接字有哪些
+
+- 哪些套接字发生了异常
+
+=== select 函数的使用方法
+
+- 设置文件描述符
+
+- 指定监视范围
+
+- 设置超时
+
+- 调用 select 函数
+
+- 查看调用结果
+
+==== 设置文件描述符
+
+利用 select 函数可以同时监视多个文件描述符，也就是监视套接字
+
+此时需要将要监视的文件描述符集中到一起，集中时也要按照监视事件进行区分(接收，传输，异常)
+
+使用 `fd_set` 数组变量执行此项操作, 注册或者更改值都需要通过以下宏来进行
+
+- FD_ZERO(fd_set* fdset): 将 fd_set变量的所有位初始化为0
+
+- FD_SET(int fd, fd_set* fdset): 从参数fdset指向的变量中注册文件描述符fd的信息
+
+- FD_CLR(int fd, fd_set* fdset): 从参数fdset指向的变量中清除文件描述符fd的信息
+
+- FD_ISSET(int fd, fd_set* fdset): 若参数fdset指向的变量中包含文件描述符fd的信息，则返回 true, 用于验证 select 函数的调用结果
+
+==== 设置检查(监视)范围及超时
+
+[source, c]
+----
+#include <sys/select.h>
+#include <sys/time.h>
+
+// maxfd: 监视对象文件描述符数量
+// readset: 将所有关注 "是否存在待读取数据" 的文件描述符注册到 fd_set 型变量，并传递其地址值
+// writeset: 将所有关注 "是否可传输无阻塞数据" 的文件描述符注册到 fd_set 变量，并传递其地址值
+// exceptset: 将所有关注 "是否发生异常" 的文件描述符注册到 fd_set 型变量，并传递其地址值
+// timeout: 为防止函数调用陷入无限阻塞的状态，传递超时(time-out)信息
+// 返回值: 发生错误时返回-1, 超时返回时返回0.因发生关注的事件返回时，返回大于0的值，该值是发生事件的文件描述符数
+int select(int maxfd, fd_set* readset, fd_set* writeset, fd_set* exceptset, const struct timeval* timeout)
+----
+
+- select函数要求通过第一个参数传递监视对象文件描述符的数量。因此需要得到注册在 fd_set 变量中的文件描述符数，但每次新建文件描述符时，其值都会增加1，所以只需要将最大的文件描述符值加1再传递到select函数即可（文件描述符从0开始）
+
+- select 函数的超时时间与 select 函数的最后一个参数有关，其中 timeval 结构体定义如下
+
+[source, c]
+----
+struct timeval
+{
+    long tv_sec; //seconds
+    long tv_usec; // microseconds
+}
+----
+
+假如不需要超时设置，那么传递NULL参数
+
+TIP: 调用 select函数后，结构体 timeval 的成员 tv_sec 和 tv_usec 的值将被替换为超时前剩余时间，因此每次调用select函数前都需要初始化 timeval结构体的变量
+
+==== 调用 select 函数后查看结果
+如果获知哪些文件描述符发生了变化呢？
+
+调用 select 函数后，向其传递的 fd_set 变量中将发生变化。原来为1的所有位均变为0，但是假如文件描述符发生了变化，那么该值仍保持1
+
+
