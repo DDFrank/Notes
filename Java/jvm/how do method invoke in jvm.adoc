@@ -1,0 +1,170 @@
+== 概述
+
+* 方法调用并不等同于方法中的代码被执行
+
+* 方法调用阶段唯一的任务就是确定被调用方法的版本
+
+* Class 文件的编译过程中不包含传统程序语言编译的连接步骤，一切方法调用在 Class 文件里面存储的都只是符号引用，而不是方法在实际运行时内存布局中的入口地址（直接引用）
+
+== 解析
+
+所有方法调用的目标方法在 Class 文件里面都是一个常量池中的符号引用，在类加载的解析阶段，会将其中的一部分符号引用转化为直接引用，这种方法调用就称为 *解析(Resolution)*
+
+=== 符合解析要求的前提
+
+* 方法在程序真正运行之前就有一个可确定的调用版本, 并且这个方法的调用版本在运行期是不可改变的
+
+* 静态方法 *invokestatic*
+
+* 私有方法 *invokespecial*
+
+* 实例构造器 *invokespecial*
+
+* 父类方法 *invokespecial*
+
+* 被 final 修饰的方法 *invokervirtual*
+
+以上这些方法称之为 *非虚方法 (Non-Virtual Method)*， 其它的都是 *虚方法(Virtual Method)*
+
+== 分派 (Dispatch)
+
+跟 *解析* 不同的另外一种方法调用形式，可能是静态也是动态的
+
+=== 静态分派
+
+依赖静态类型来决定方法执行版本的分派动作
+
+以下面的代码为例
+
+[source:java]
+----
+public class StaticDispatch {
+    static abstract class Human {}
+
+    static class Man extends Human {}
+
+    static class Woman extends Human {}
+
+    public void sayHello(Human guy) {
+        System.out.println("hello, guy!");
+    }
+
+    public void sayHello(Man guy) {
+        System.out.println("hello, gentleman!");
+    }
+
+    public void sayHello(Woman guy) {
+        System.out.println("hello, lady!");
+    }
+
+    public static void main(String[] args) {
+        Human man = new Man();
+        Human woman = new Woman();
+        StaticDispatch sr = new StaticDispatch();
+        sr.sayHello(man);
+        sr.sayHello(woman);
+    }
+}
+----
+
+* 声明类型称为变量的 *静态类型 (Static Type)*, 比如 上文中的"Human", 或者叫做 *外观类型(Apparent Type)*
+
+* 赋值类型称为变量的 *实际类型(Actual Type)* 或者叫 *运行时类型 (Runtime Type)*，比如上文中的 "Man"
+
+* 变量本身的静态类型不会被改变，并且最终的静态类型是在编译期可知的，而实际类型变化的结果是在运行期才可确定
+
+==== 重载
+
+* *重载* 的时候是根据参数的静态类型而不是实际类型作为判定依据的
+
+* 由于静态类型在编译期可知所以在编译阶段，Javac 编译器就根据参数的静态类型决定了会使用哪个版本，并把该方法的符号引用写到 main() 方法里的两条 * invokevirtual * 指令的参数中
+
+* *重载* 是静态类型 最典型的应用
+
+* 在很多情况下重载版本不是唯一的，往往只能确定一个 "相对更合适的" 版本, 主要原因是 字面量只能通过语言，语法的规则去理解和推断，比较模糊
+
+=== 动态分派
+
+* 运行期根据实际类型确定方法执行版本的分派过程称为动态分派
+
+* 主要用于实现 *重写(ovverride)*
+
+* 调用实际类型的的 *invokevirtual* 指令的参数，还是使用的 变量的实际类型的符号引用，实际寻找方法的版本的过程委托给了 *invokevirtual* 指令
+
+==== invokevirtual 指令的运行时解析过程
+
+* 找到操作数栈顶的第一个元素所指向的对象的 *实际类型* ，记作C
+
+* 如果再类型C中找到与常量中的描述符和简单名称都相符的方法，则进行访问权限校验，如果通过则返回这个方法的直接引用，查找过程结束，否则抛出 *java.lang.IllegalAccessError* 异常
+
+* 否则按照继承关系从下往上依次对C的各个父类进行第二步的搜索和验证过程。
+
+* 如果始终没有找到合适的方法，则抛出 *java.lang.AbstractMethodError* 异常
+
+.Important: 多态性的根源在于虚方法调用指令 invokevirtual 的执行逻辑，所以这个只对方法有效，对字段是无效的。子类中如果声明了和父类同名的字段，那么子类的字段就会遮蔽父类的同名字段。
+
+=== 单分派和多分派
+
+.Tip: 方法的接收者与方法的参数统称为方法的宗量
+
+* 单分派: 根据一个宗量对目标方法进行选择
+
+* 多分派: 根据多于一个宗量对目标方法进行选择
+
+[source:java]
+----
+public class Dispatch {
+    static class QQ {}
+    static class _360 {}
+
+    public static class Father {
+        public void hardChoice(QQ arg) {
+            System.out.println("father choose qq");
+        }
+
+        public void hardChoice(_360 arg) {
+            System.out.println("father choose 360");
+        }
+    }
+
+    public static class Son extends Father {
+        public void hardChoice(QQ arg) {
+            System.out.println("son choose qq");
+        }
+
+        public void hardChoice(_360 arg) {
+            System.out.println("son choose 360");
+        }
+    }
+
+    public static void main(String[] args) {
+        Father father = new Father();
+        Father son = new Son();
+        father.hardChoice(new _360());
+        son.hardChoice(new QQ());
+    }
+}
+----
+
+==== 编译阶段
+* 在编译阶段时，也就是 *静态分派* 的过程, 此时选择目标方法的依据有2点
+
+** 静态类型是 *Father* 还是 *Son*
+
+** 方法参数是 *QQ* 还是 *360*
+
+* 最终产生的两条 *invokevirtual* 指令及其参数分别为常量池中指向 *Father::hardChoice(360)* 及 *Father::hardChoice(QQ)* 方法的符号引用
+
+* 因为是根据两个宗量进行选择，所以 Java 的 *静态分派* 属于多分派类型
+
+==== 运行阶段
+
+* 也就是 *动态分派* 的过程
+
+* 指向 *son.hardChoice(new QQ())* 这一句时，由于编译期已经决定目标方法的签名必须为 *hardChoice(QQ)*, 虚拟机此时不会关心传递过来的参数的静态类型或者是实际类型
+
+* 影响虚拟机选择方法的因素只有方法的接收者的 *实际类型* 是 *Father* 还是 *Son*， 所以只有一个宗量作为依据
+
+* 所以Java语言的动态分派属于单分派类型
+
+=== 虚拟机动态分派的实现
