@@ -1,0 +1,98 @@
+== offer 方法
+
+[source, java]
+----
+/**
+     * Inserts the specified element at the tail of this queue.
+     * As the queue is unbounded, this method will never return {@code false}.
+     *
+     * @return {@code true} (as specified by {@link Queue#offer})
+     * @throws NullPointerException if the specified element is null
+     */
+    public boolean offer(E e) {
+        checkNotNull(e);
+        // 创建一个入队节点
+        final Node<E> newNode = new Node<E>(e);
+        // 因为 tail 节点不一定是队列的尾节点, 所以这里用 p 来表示队列的尾节点
+        for (Node<E> t = tail, p = t; ; ) {
+            // 检查 tail 的 next 是不是为 null
+            Node<E> q = p.next;
+            if (q == null) {
+                // 假如 p 的 next 是 null, 也即是说，p 正好是队列的尾节点, 也只有这种情况下，才算确定了p是队列的尾节点
+                // p is last node
+                // 将入队节点设置为尾节点的next, 也就是 p 的next
+                if (p.casNext(null, newNode)) {
+                    // Successful CAS is the linearization point
+                    // for e to become an element of this queue,
+                    // and for newNode to become "live".
+                    // 假如 p 等于t,那么此时不会去更新 tail的指向，所以可能产生 tail 不指向尾节点的情况
+                    // p是真正的尾节点, 如果 p 不等于 t ，那么说明 tail 没有指向队列的尾节点，那么就尝试更新一次 tail 为尾节点
+                    if (p != t) // hop two nodes at a time
+                        // cas设置失败了也不要紧，说明其它线程可能已经更新了尾节点
+                        casTail(t, newNode);  // Failure is OK.
+                    return true;
+                }
+                // 假如 cas 设置失败了，说明其它线程修改了tail节点，那么进入下一次循环
+                // Lost CAS race to another thread; re-read next
+            } else if (p == q)
+                // 这部分的情况对应 线程在 offer 的时候，其它线程已经poll了其它节点的情况
+                // p == q 的情况只会出现在 poll 的时候，别的线程已经将旧的head 构造成为了哨兵节点
+                // 一个线程 offer, 一个线程 poll 的时候就有可能出现
+                // We have fallen off list.  If tail is unchanged, it
+                // will also be off-list, in which case we need to
+                // jump to head, from which all live nodes are always
+                // reachable.  Else the new tail is a better bet.
+                // 此时查看 tail 是否发生变化，发生变化说明别的线程更新了tail，那么继续定位尾节点
+                // 没有发生变化说明那么就可以从head开始查找了
+                p = (t != (t = tail)) ? t : head;
+            else
+                // 这一行代码用于找出真正的尾节点,也就是 确定p
+                // 通常在 tail 指向的不是尾节点时发生
+                // Check for tail updates after two hops.
+                // p == t 的时候就是说明 p并非是尾节点的情况，那么直接将p设置为next节点即可
+                // 这里 t != (t = tail) 是检查 tail 是否被其它线程修改，假如被修改了，那么直接 将 p 设置为 其它线程修改过的 tail 节点，再次开始循环
+                p = (p != t && t != (t = tail)) ? t : q;
+
+            // 确定了 p 为队列尾节点后再次开始入队操作
+        }
+    }
+----
+
+== poll 方法
+
+[source, java]
+----
+public E poll() {
+        restartFromHead:
+        for (; ; ) {
+            // 变量p是队列要删除的真正头节点
+            for (Node<E> h = head, p = h, q; ; ) {
+                E item = p.item;
+                // 假如 item 存在，那么就cas设置为null出队
+                if (item != null && p.casItem(item, null)) {
+                    // Successful CAS is the linearization point
+                    // for item to be removed from this queue.
+                    // p 假如是真正的头节点，那么 p 肯定是 == h 的
+                    // 这里如果发现 head 没有指向头节点，那么就更新一次head的指向
+                    if (p != h) // hop two nodes at a time
+                        // 假如 p 的下个节点不为空（为空说明p既是头节点，也是尾节点），那么就head更新为下一个节点(因为p的数据已经清空了，不能作为头节点了)
+                        updateHead(h, ((q = p.next) != null) ? q : p);
+                    // 返回头部节点的数据, 此时很有可能造成头节点的item已经被设置为null了，
+                    return item;
+                    // 假如 item 为null，说明 head 指向的不是头节点，这时候要找到头节点
+                    // 这里将q赋值为下一个节点
+                } else if ((q = p.next) == null) {
+                    // a = p.next 只有在队列为空的时候才会出现，所以这里更新头部后直接返回 null 即可
+                    updateHead(h, p);
+                    return null;
+                } else if (p == q)
+                    // p == q 时，只有在 原来的 head 的数据已经被取空，旧的head 通过 updateHead 变成了哨兵节点的时候才会出现，此时需要重新赋值 p ,h
+                    // 多线程的时候, 别的线程已经取出了数据的时候，就会出现这种情况
+                    continue restartFromHead;
+                else
+                    // 由于上文中第二个 else if 已经把 q赋值为下一个节点，所以这里直接移动 p 为下一个节点，接着循环判断 定位 p 是否为头节点
+                    p = q;
+            }
+        }
+    }
+----
