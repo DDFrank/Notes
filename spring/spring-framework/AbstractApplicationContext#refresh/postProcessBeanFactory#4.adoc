@@ -1,0 +1,20 @@
+== 准备BeanFactory完成后进行的后置处理
+[source, java]
+----
+  // AnnotationConfigServletWebServerApplicationContext 中重写了
+  protected void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) {
+    // 加入了 WebApplicationContextServletContextAwareProcessor 这个后置处理器, 用来在 bean 中注入 ServletContext 的
+    // 同时注册两种 scope request 和 session
+    super.postProcessBeanFactory(beanFactory);
+    // 包扫描
+    // debug的时候此时会为空, 所以其实扫描不会在这里开始
+    if (this.basePackages != null && this.basePackages.length > 0) {
+        this.scanner.scan(this.basePackages);
+    }
+    // 这里也是空的
+    if (!this.annotatedClasses.isEmpty()) {
+        this.reader.register(ClassUtils.toClassArray(this.annotatedClasses));
+    }
+}
+----
+所以其实也没干什么

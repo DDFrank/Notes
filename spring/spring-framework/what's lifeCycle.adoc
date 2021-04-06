@@ -1,0 +1,30 @@
+== Spring 中的生命周期接口
+[source, java]
+----
+/*
+A common interface defining methods for start/stop lifecycle control. The typical use case for this is to control asynchronous processing. NOTE: This interface does not imply specific auto-startup semantics. Consider implementing SmartLifecycle for that purpose. Can be implemented by both components (typically a Spring bean defined in a Spring context) and containers (typically a Spring ApplicationContext itself). Containers will propagate start/stop signals to all components that apply within each container, e.g. for a stop/restart scenario at runtime. Can be used for direct invocations or for management operations via JMX. In the latter case, the org.springframework.jmx.export.MBeanExporter will typically be defined with an org.springframework.jmx.export.assembler.InterfaceBasedMBeanInfoAssembler, restricting the visibility of activity-controlled components to the Lifecycle interface. Note that the present Lifecycle interface is only supported on top-level singleton beans. On any other component, the Lifecycle interface will remain undetected and hence ignored. Also, note that the extended SmartLifecycle interface provides sophisticated integration with the application context's startup and shutdown phases.
+
+定义启动/停止生命周期控制方法的通用接口。典型的用例是控制异步处理。注意：此接口并不意味着特定的自动启动语义。考虑为此目的实施 SmartLifecycle。
+
+可以通过组件（通常是在Spring上下文中定义的 Spring bean）和容器（通常是Spring ApplicationContext 本身）实现。容器会将开始/停止信号传播到每个容器中应用的所有组件，例如在运行时停止/重新启动的情况。
+
+可以用于直接调用或通过JMX进行管理操作。在后一种情况下，通常将使用 InterfaceBasedMBeanInfoAssembler 定义 MBeanExporter，从而将活动控制的组件的可见性限制为 Lifecycle 接口。
+
+请注意，当前的 Lifecycle 接口仅在顶级 Singleton Bean 上受支持。在任何其他组件上，Lifecycle 接口将保持未被检测到并因此被忽略。另外，请注意，扩展的 SmartLifecycle 接口提供了与应用程序上下文的启动和关闭阶段的复杂集成。
+*/
+----
+
+实现了 *Lifecycle* 接口的Bean可以规范化它的生命周期，可以在IOC容器的启动、停止时，自动触发接口中定义的 *start* 方法和 *stop* 方法
+
+=== 拓展接口 SmartLifeCycle
+
+[source, java]
+----
+/*
+An extension of the Lifecycle interface for those objects that require to be started upon ApplicationContext refresh and/or shutdown in a particular order. The isAutoStartup() return value indicates whether this object should be started at the time of a context refresh. The callback-accepting stop(Runnable) method is useful for objects that have an asynchronous shutdown process. Any implementation of this interface must invoke the callback's run() method upon shutdown completion to avoid unnecessary delays in the overall ApplicationContext shutdown.
+
+Lifecycle 接口的扩展，用于那些需要按特定顺序刷新和/或关闭IOC容器时启动的对象。 isAutoStartup() 返回值指示是否应在刷新上下文时启动此对象。接受回调的 stop(Runnable) 方法对于具有异步关闭过程的对象很有用。此接口的任何实现都必须在关闭完成时调用回调的 run() 方法，以避免在整个IOC容器关闭中不必要的延迟。
+*/
+----
+
+=== 使用案例

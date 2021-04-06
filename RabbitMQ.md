@@ -325,10 +325,9 @@ Map<String, Object> args = new HashMap<>();
 
 - 通过 channel.queueDeclare 方法中的设置 x-dead-letter-exchange 参数来为这个队列添加 DLX
 
-- 也可以为DLX指定路由键，如果没有特殊指定，则使用原队列的路由键 也就是参数中添加 x-dead-letter-routing-key
+- 也可以为DLX指定路由键，如果没有特殊指定，则使用原队列的路由键 (也就是参数中添加 x-dead-letter-routing-key)
 
   
-
 ## 延迟队列
 
 #### 利用 DLX 和 TTL 模拟出延迟队列的功能

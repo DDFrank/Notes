@@ -1,0 +1,60 @@
+== BeanFactory的预处理配置
+[source, java]
+----
+protected void prepareBeanFactory(ConfigurableListableBeanFactory beanFactory) {
+		// Tell the internal bean factory to use the context's class loader etc.
+    // 设置类加载器
+		beanFactory.setBeanClassLoader(getClassLoader());
+    // 设置表达式解析器
+		beanFactory.setBeanExpressionResolver(new StandardBeanExpressionResolver(beanFactory.getBeanClassLoader()));
+    // TODO 这是啥
+		beanFactory.addPropertyEditorRegistrar(new ResourceEditorRegistrar(this, getEnvironment()));
+
+		// Configure the bean factory with context callbacks.
+    // 配置一个可回调注入ApplicationContext的BeanPostProcessor
+    // 也就是 假如 Bean 实现了以下几个忽略的接口，那么 这个 后置处理器会负责注入这些东西作为成员变量
+		beanFactory.addBeanPostProcessor(new ApplicationContextAwareProcessor(this));
+    // 因为这些成员变量可以通过上一行的后置处理器来 注入，所以在初始化的时候就忽略其依赖
+		beanFactory.ignoreDependencyInterface(EnvironmentAware.class);
+		beanFactory.ignoreDependencyInterface(EmbeddedValueResolverAware.class);
+		beanFactory.ignoreDependencyInterface(ResourceLoaderAware.class);
+		beanFactory.ignoreDependencyInterface(ApplicationEventPublisherAware.class);
+		beanFactory.ignoreDependencyInterface(MessageSourceAware.class);
+		beanFactory.ignoreDependencyInterface(ApplicationContextAware.class);
+
+		// BeanFactory interface not registered as resolvable type in a plain factory.
+		// MessageSource registered (and found for autowiring) as a bean.
+    // 这个是说将以下类型都在 bean 工厂中标记为需要特殊解析方式的类型
+    // 也就是假如发现有什么 bean 依赖了以下类型，那么就使用 第二个参数 的 Object 直接 set 进去
+		beanFactory.registerResolvableDependency(BeanFactory.class, beanFactory);
+		beanFactory.registerResolvableDependency(ResourceLoader.class, this);
+		beanFactory.registerResolvableDependency(ApplicationEventPublisher.class, this);
+		beanFactory.registerResolvableDependency(ApplicationContext.class, this);
+
+		// Register early post-processor for detecting inner beans as ApplicationListeners.
+    // 注册一个后置处理器，可以检测 bean 是否实现了 ApplicationListener 接口
+    // 主要用于检查这个 Bean 是不是单例的, 假如是那么就调用 applicationContext.addApplicationListener 注册进去
+		beanFactory.addBeanPostProcessor(new ApplicationListenerDetector(this));
+
+  // TODO 不知道干啥的
+		// Detect a LoadTimeWeaver and prepare for weaving, if found.
+		if (beanFactory.containsBean(LOAD_TIME_WEAVER_BEAN_NAME)) {
+			beanFactory.addBeanPostProcessor(new LoadTimeWeaverAwareProcessor(beanFactory));
+			// Set a temporary ClassLoader for type matching.
+			beanFactory.setTempClassLoader(new ContextTypeMatchClassLoader(beanFactory.getBeanClassLoader()));
+		}
+
+		// Register default environment beans.
+    // 注册了默认的运行时环境、系统配置属性、系统环境的信息
+		if (!beanFactory.containsLocalBean(ENVIRONMENT_BEAN_NAME)) {
+			beanFactory.registerSingleton(ENVIRONMENT_BEAN_NAME, getEnvironment());
+		}
+		if (!beanFactory.containsLocalBean(SYSTEM_PROPERTIES_BEAN_NAME)) {
+			beanFactory.registerSingleton(SYSTEM_PROPERTIES_BEAN_NAME, getEnvironment().getSystemProperties());
+		}
+		if (!beanFactory.containsLocalBean(SYSTEM_ENVIRONMENT_BEAN_NAME)) {
+			beanFactory.registerSingleton(SYSTEM_ENVIRONMENT_BEAN_NAME, getEnvironment().getSystemEnvironment());
+		}
+	}
+----
+所以这一步里最重要的是注册各种 *BeanPostProcessor*

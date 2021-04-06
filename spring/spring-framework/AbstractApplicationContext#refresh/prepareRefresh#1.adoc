@@ -1,0 +1,50 @@
+== 初始化前的预处理
+[source, java]
+----
+protected void prepareRefresh() {
+		// Switch to active.
+    // 用于后面记录启动时间
+		this.startupDate = System.currentTimeMillis();
+
+    // 重置状态位
+		this.closed.set(false);
+		this.active.set(true);
+
+		if (logger.isDebugEnabled()) {
+			if (logger.isTraceEnabled()) {
+				logger.trace("Refreshing " + this);
+			}
+			else {
+				logger.debug("Refreshing " + getDisplayName());
+			}
+		}
+
+		// Initialize any placeholder property sources in the context environment.
+        // 初始化属性配置
+        // 实际上只有 StandardServletEnvironment 有实际重写该方法, 作用就是将Servlet容器的一些初始化参数注册到IOC
+		initPropertySources();
+
+		// Validate that all properties marked as required are resolvable:
+		// see ConfigurablePropertyResolver#setRequiredProperties
+        // 属性校验, 校验一些必须存在的属性，不是很重要。。
+        // debug 的时候，经常会发现没有任何需要校验的属性
+		getEnvironment().validateRequiredProperties();
+
+		// Store pre-refresh ApplicationListeners...
+		if (this.earlyApplicationListeners == null) {
+			this.earlyApplicationListeners = new LinkedHashSet<>(this.applicationListeners);
+		}
+		else {
+			// Reset local application listeners to pre-refresh state.
+			this.applicationListeners.clear();
+			this.applicationListeners.addAll(this.earlyApplicationListeners);
+		}
+
+		// Allow for the collection of early ApplicationEvents,
+		// to be published once the multicaster is available...
+    // 这个集合的作用，是保存容器中的一些事件，以便在合适的时候利用事件广播器来广播这些事件
+		this.earlyApplicationEvents = new LinkedHashSet<>();
+	}
+----
+
+所以这个步骤其实也没干什么

@@ -1,0 +1,3 @@
+== 初始化剩余的单实例Bean
+这一步就是利用 `BeanDefinition` 来创建单例Bean了
+详见 `how do spring create bean instance`

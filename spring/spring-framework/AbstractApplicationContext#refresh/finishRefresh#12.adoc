@@ -1,0 +1,110 @@
+== 完成容器的创建工作
+[source, java]
+----
+protected void finishRefresh() {
+    // Clear context-level resource caches (such as ASM metadata from scanning).
+    // 清除资源缓存(如扫描的ASM元数据)
+    // 很简单
+    clearResourceCaches();
+
+    // Initialize lifecycle processor for this context.
+    // 初始化生命周期处理器
+    initLifecycleProcessor();
+
+    // Propagate refresh to lifecycle processor first.
+    // 将刷新传播到生命周期处理器
+    getLifecycleProcessor().onRefresh();
+
+    // Publish the final event.
+    // 发布容器刷新完成的事件，让监听器去回调各自的方法
+    // 发布了 ContextRefreshedEvent 事件
+    publishEvent(new ContextRefreshedEvent(this));
+
+    // Participate in LiveBeansView MBean, if active.
+    LiveBeansView.registerApplicationContext(this);
+}
+----
+
+=== 初始化生命周期处理器并进行回调
+[source, java]
+----
+public static final String LIFECYCLE_PROCESSOR_BEAN_NAME = "lifecycleProcessor";
+
+protected void initLifecycleProcessor() {
+    ConfigurableListableBeanFactory beanFactory = getBeanFactory();
+    if (beanFactory.containsLocalBean(LIFECYCLE_PROCESSOR_BEAN_NAME)) {
+        this.lifecycleProcessor =
+                beanFactory.getBean(LIFECYCLE_PROCESSOR_BEAN_NAME, LifecycleProcessor.class);
+        if (logger.isTraceEnabled()) {
+            logger.trace("Using LifecycleProcessor [" + this.lifecycleProcessor + "]");
+        }
+    }
+    else {
+        DefaultLifecycleProcessor defaultProcessor = new DefaultLifecycleProcessor();
+        defaultProcessor.setBeanFactory(beanFactory);
+        this.lifecycleProcessor = defaultProcessor;
+        beanFactory.registerSingleton(LIFECYCLE_PROCESSOR_BEAN_NAME, this.lifecycleProcessor);
+        if (logger.isTraceEnabled()) {
+            logger.trace("No '" + LIFECYCLE_PROCESSOR_BEAN_NAME + "' bean, using " +
+                    "[" + this.lifecycleProcessor.getClass().getSimpleName() + "]");
+        }
+    }
+}
+----
+
+*lifeCycle* 的处理详见 *what's lifeCycle*
+
+[source, java]
+----
+public void onRefresh() {
+    startBeans(true);
+    this.running = true;
+}
+
+private void startBeans(boolean autoStartupOnly) {
+    // 找出全部的生命周期处理器
+    Map<String, Lifecycle> lifecycleBeans = getLifecycleBeans();
+    Map<Integer, LifecycleGroup> phases = new HashMap<>();
+    lifecycleBeans.forEach((beanName, bean) -> {
+        if (!autoStartupOnly || (bean instanceof SmartLifecycle && ((SmartLifecycle) bean).isAutoStartup())) {
+            int phase = getPhase(bean);
+            LifecycleGroup group = phases.get(phase);
+            if (group == null) {
+                group = new LifecycleGroup(phase, this.timeoutPerShutdownPhase, lifecycleBeans, autoStartupOnly);
+                phases.put(phase, group);
+            }
+            group.add(beanName, bean);
+        }
+    });
+    if (!phases.isEmpty()) {
+        // 排序后调用其 start 方法
+        List<Integer> keys = new ArrayList<>(phases.keySet());
+        Collections.sort(keys);
+        for (Integer key : keys) {
+            phases.get(key).start();
+        }
+    }
+}
+----
+
+== ServletWebServerApplicationContext 的 拓展
+
+[source, java]
+----
+protected void finishRefresh() {
+    super.finishRefresh();
+    // 启动了web容器
+    WebServer webServer = startWebServer();
+    if (webServer != null) {
+        publishEvent(new ServletWebServerInitializedEvent(webServer, this));
+    }
+}
+
+private WebServer startWebServer() {
+    WebServer webServer = this.webServer;
+    if (webServer != null) {
+        webServer.start();
+    }
+    return webServer;
+}
+----

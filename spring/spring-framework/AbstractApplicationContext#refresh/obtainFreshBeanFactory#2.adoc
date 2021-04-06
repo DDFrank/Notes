@@ -1,0 +1,13 @@
+== 获取BeanFactory，加载所有bean的定义信息（未实例化)
+[source, java]
+----
+protected ConfigurableListableBeanFactory obtainFreshBeanFactory() {
+    // 刷新BeanFactory
+    // 刷新就是设置了一个id
+    refreshBeanFactory();
+    // 然后直接获取
+    return getBeanFactory();
+}
+
+----
+这个步骤也没干什么

@@ -1,0 +1,37 @@
+== 注册监听器
+
+[source, java]
+----
+protected void registerListeners() {
+    // Register statically specified listeners first.
+    // 把所有的IOC容器中以前缓存好的一组ApplicationListener取出来，添加到事件派发器中
+    // 这个之前在 初始化IOC容器 时已经set过了
+    for (ApplicationListener<?> listener : getApplicationListeners()) {
+        getApplicationEventMulticaster().addApplicationListener(listener);
+    }
+
+    // Do not initialize FactoryBeans here: We need to leave all regular beans
+    // uninitialized to let post-processors apply to them!
+    // 拿到BeanFactory中定义的所有的ApplicationListener类型的组件全部取出，添加到事件派发器中
+    // 包括用户自定义的事件
+    String[] listenerBeanNames = getBeanNamesForType(ApplicationListener.class, true, false);
+    for (String listenerBeanName : listenerBeanNames) {
+        getApplicationEventMulticaster().addApplicationListenerBean(listenerBeanName);
+    }
+
+    // Publish early application events now that we finally have a multicaster...
+    // 广播早期事件
+    // 初始化前的预处理 中有 new 这个 set
+    Set<ApplicationEvent> earlyEventsToProcess = this.earlyApplicationEvents;
+    this.earlyApplicationEvents = null;
+    if (earlyEventsToProcess != null) {
+        for (ApplicationEvent earlyEvent : earlyEventsToProcess) {
+            getApplicationEventMulticaster().multicastEvent(earlyEvent);
+        }
+    }
+}
+
+public Collection<ApplicationListener<?>> getApplicationListeners() {
+    return this.applicationListeners;
+}
+----

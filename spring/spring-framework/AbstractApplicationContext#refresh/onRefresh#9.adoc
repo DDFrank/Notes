@@ -1,0 +1,89 @@
+== 子类拓展刷新
+
+[source, java]
+----
+// 这里是模板方法，也就是交给子类去拓展了
+protected void onRefresh() throws BeansException {
+    // For subclasses: do nothing by default.
+}
+----
+
+=== ServletWebServerApplicationContext 的拓展
+刷新完成后创建 web 服务器
+
+[source, java]
+----
+protected void onRefresh() {
+    super.onRefresh();
+    try {
+        createWebServer();
+    }
+    catch (Throwable ex) {
+        throw new ApplicationContextException("Unable to start web server", ex);
+    }
+}
+
+private void createWebServer() {
+    WebServer webServer = this.webServer;
+    ServletContext servletContext = getServletContext();
+    if (webServer == null && servletContext == null) {
+        // 9.1 这一步创建了嵌入式Servlet容器的工厂
+        ServletWebServerFactory factory = getWebServerFactory();
+        // 9.2 创建嵌入式Servlet容器
+        this.webServer = factory.getWebServer(getSelfInitializer());
+    }
+    else if (servletContext != null) {
+        try {
+            getSelfInitializer().onStartup(servletContext);
+        }
+        catch (ServletException ex) {
+            throw new ApplicationContextException("Cannot initialize servlet context", ex);
+        }
+    }
+    initPropertySources();
+}
+----
+
+==== 获取嵌入式 Servlet 容器工厂的 Bean
+
+[source, java]
+----
+// 选择创建 web 容器的工厂
+// 三个容器类的配置见 ServletWebServerFactoryAutoConfiguration
+protected ServletWebServerFactory getWebServerFactory() {
+    // Use bean names so that we don't consider the hierarchy
+    //获取IOC容器中类型为ServletWebServerFactory的Bean
+    String[] beanNames = getBeanFactory().getBeanNamesForType(ServletWebServerFactory.class);
+    if (beanNames.length == 0) {
+        throw new ApplicationContextException("Unable to start ServletWebServerApplicationContext due to missing "
+                + "ServletWebServerFactory bean.");
+    }
+    if (beanNames.length > 1) {
+        throw new ApplicationContextException("Unable to start ServletWebServerApplicationContext due to multiple "
+                + "ServletWebServerFactory beans : " + StringUtils.arrayToCommaDelimitedString(beanNames));
+    }
+    return getBeanFactory().getBean(beanNames[0], ServletWebServerFactory.class);
+}
+----
+
+=== 创建webServer  （以 Tomcat 为例）
+[source, java]
+----
+// TomcatServletWebServerFactory
+public WebServer getWebServer(ServletContextInitializer... initializers) {
+    Tomcat tomcat = new Tomcat();
+    File baseDir = (this.baseDirectory != null) ? this.baseDirectory : createTempDir("tomcat");
+    tomcat.setBaseDir(baseDir.getAbsolutePath());
+    Connector connector = new Connector(this.protocol);
+    tomcat.getService().addConnector(connector);
+    customizeConnector(connector);
+    tomcat.setConnector(connector);
+    tomcat.getHost().setAutoDeploy(false);
+    configureEngine(tomcat.getEngine());
+    for (Connector additionalConnector : this.additionalTomcatConnectors) {
+        tomcat.getService().addConnector(additionalConnector);
+    }
+    prepareContext(tomcat.getHost(), initializers);
+    return getTomcatWebServer(tomcat);
+}
+----
