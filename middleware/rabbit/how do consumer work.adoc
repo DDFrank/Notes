@@ -1,0 +1,81 @@
+== 消费者如何消费
+=== Basic.Get
+
+* 消费者调用 *Basic.Get*， 假如队列中有数据，服务器就会回复一个 *Basic.GetOk*
+
+* 假如没有消息，那么服务器会回复 *Basic.GetEmpty*
+
+* 需要轮询队列，实时性不太好，也容易造成资源浪费
+
+=== Basic.Consume
+
+* 消费者调用 *Basic.Consume*, 服务端回复 *Basic.ConsumeOk*
+
+* 当队列中有数据时，服务器发送一个 *Basic.Deliver* 给消费者
+
+* 消费者回复 *Basic.Ack* 后，服务器可以接着推送消息
+
+* 消费者需要停止消费时,会调用 *Basic.Cancel*, 服务端回复 *Basic.CancelOk* 后，停止消费
+
+==== 消费者标签
+
+* 消费者调用 *Basic.Consume* 时会创建一个唯一的字符串，用来标识消费者。这个就是 *消费者标签 (Consumer Tag)*
+
+* 服务器每次会把消费者标签和消息一起发给消费者
+
+== 如何提升消费者性能
+
+=== 使用 no-ack 模式实现更快的吞吐量
+
+* 在消费者调用 *Basic.Consume* 时发送 *no-ack* 标志，那么 服务器将会在有消息时尽快发送消息而不会等待消费者的 ack
+
+* 当消息充满了 套接字缓冲区而程序崩溃时，消息会丢失
+
+=== 设置 prefetch 控制消息预获取数量
+
+* AMQP 规范要求 *Channel* 提供 *QOS* 的设置
+
+* 消费者可以调用 *Basic.Qos* 来发送来指定预获取的消息数量, 可以指定该设置是针对该消费者还是该 *Channel* 的全部消费者
+
+* 可以同时设置 *PrefetchCount* 和 *PrefetchSize*
+
+==== 一次确认多个消息
+
+* 使用 *Qos* 设置后，可以不用 *Basic.ACK* 响应来确认收到的每条消息
+
+* *Basic.ACK* 响应有一个 *multiple* 的属性，可以设置它来让确认以前的全部消息
+
+* 一次确认多个消息可以提高网络的吞吐量
+
+=== 消费者使用事务
+
+* 如果不使用 *Qos* 设置，而用事务来批量提交消息的时候，可能略有性能提升
+
+* 事务无法用于 *no-ack* 模式
+
+== 拒绝消息
+
+=== Basic.Reject
+
+* AMQP 规范提供的 API
+
+* 消费者可以使用 *delivery_tag* 调用 *Basic.Reject* 拒绝一个消息, 拒绝时可以使用 *requeue* 参数来指定消息是否需要重新入队
+
+* 假如没有开启 *no-ack* 模式，服务器端在收到 *Basic.Reject* 后就会丢弃该消息
+
+=== Basic.Nack
+
+* RabbitMQ 提供的拓展, 非 AMQP 规范
+
+* *Basic.Nack* 和 *Basic.Ack* 类似, 可以一次性拒绝多个消息
+
+* 也可以使用 *requeue* 参数决定消息是否需要重新入队
+
+=== 死信交换器
+
+* 调用 *Queue.Declare* 的时候传入 *x-dead-letter-exchange* 参数来指定死信交换器
+
+* 可以使用预定义的 *routingKey* 来投递 死信消息, 需要在 *Queue.Declare* 的时候传入 *x-dead-letter-routing-key* 参数
+
+
+* 

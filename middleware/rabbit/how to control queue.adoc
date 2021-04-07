@@ -1,0 +1,55 @@
+.Important: 队列是不可变的，所以队列一旦声明成功，就无法修改,除非删除后重新声明
+
+== 临时队列
+
+=== auto_delete 队列
+
+* 在 *Queue.Declare* 的时候将 *auto_delete* 设置为 true 即可
+
+* 队列会在没有消费者进行监听的时候自动删除
+
+* 可以用于实现聊天室点对点的聊天或者RPC功能
+
+=== exclusive 队列
+
+* 在 *Queue.Declare* 的时候设置 *exclusive* 参数
+
+* 当创建队列的 *Channel* 关闭时，*exclusive* 队列也被关闭
+
+* *exclusive* 队列删除时不会考虑是否有任何 *Basic.Consume* 请求
+
+=== 自动过期队列
+
+* 在 *Queue.Declare* 的时候传入 *x-expire* 参数 (毫秒单位), 队列过期时会被自动删除
+
+* 队列只有在没有消费者的情况下才会被删除，也就是消费者调用 *Basic.Consume* 而没有调用 *Basic.Cancel*
+
+* 队列如果在过期时间内收到了一个 *Basic.Get* 调用，那么过期设置将会无效
+
+* RabbitMQ 不保证删除过期队列的时效性
+
+== 永久队列
+
+=== 队列持久性
+
+* 在 *Queue.Declare* 的时候设置 *durable* 为 true 
+
+* 持久队列会在 *Queue.Delete* 被调用前一直存储在服务器中
+
+=== 队列中消息自动过期
+
+* 在 *Queue.Declare* 的时候传入参数 *x-message-ttl* 可以确保队列中全部消息都具有一个ttl
+
+* 假如声明了死信交换机，那么消息过期后会进入死信
+
+=== 最大长度队列
+
+* 在 *Queue.Declare* 的时候传入参数 *x-max-length* 可以确保队列只能容纳一定量的消息
+
+* 当队列满时，队列前端的消息将被删除
+
+* 假如声明了死信交换机, 那么消息被删除后会进入死信
+
+
+
+
