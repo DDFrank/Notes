@@ -1,0 +1,6 @@
+== The Component of Message
+
+.Table  The Component of Message
+|===
+|Component
+|===
