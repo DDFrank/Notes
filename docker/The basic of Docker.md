@@ -287,8 +287,6 @@ docker run -d --name mysql -e MYSQL_RANDOM_ROOT_PASSWORD=yes --network individua
 docker run -d --name nginx -p 80:80 -p 443:443 nginx:1.12
 ```
 
-
-
 # 管理和存储数据
 
 ## 数据管理实现方式
@@ -408,9 +406,10 @@ docker run --rm --volumes-from appdata -v /backup:/backup ubuntu tar xvf /backup
 
 ### 另一个挂载选项
 
-- 可以使用 `--mount` 来挂载
+- 可以使用 `--mount` 来挂载, 其中逗号分隔来指定各种参数
 
 ```shell
+# type 指定各种挂载方式, 不指定的话默认为 volume 类型
 docker run -d --name webapp webapp:latest --mount 'type=volume,src=appdata,dst=/webapp/storage,volume-driver=local,volume-opt=type=nfs,volume-opt=device=<nfs-server>:<nfs-path>' webapp:latest
 ```
 
