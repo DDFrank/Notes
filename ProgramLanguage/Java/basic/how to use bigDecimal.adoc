@@ -1,0 +1,17 @@
+== 基本用法
+
+* 使用 字符串的构造器是最为可靠的
+
+* 使用 BigDecimal 提供的方法进行计算和比较
+
+* BigDecimal#divide 除不尽的时候会出现异常，所以应该指定保留的小数位
+
+[source, java]
+----
+
+divide(xxx, 2)
+----
+
+* 使用 NumberFormat 类 对 BigDecimal 类的输出进行格式化
+
+* BigDecimal 是不可变的对象
