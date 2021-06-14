@@ -1,7 +1,7 @@
 * 自动装配的一般过程
 spring-boot 利用 `@EnableAutoConfiguration` 来开启自动装配
 ```java
-// 保存根宝的路径
+// 保存根包的路径
 @AutoConfigurationPackage
 // 真正开启自动配置的注解
 @Import(AutoConfigurationImportSelector.class)
